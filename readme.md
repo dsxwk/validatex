@@ -463,3 +463,9 @@ Go `1.27.0` or newer is required.
 ## Scope
 
 The package covers validation rules that do not require external state. Rules such as `exists`, `unique`, `current_password`, file validation, MIME detection, and image dimensions depend on a database, authentication system, uploads, or application configuration and should be implemented by the consumer through custom `Rule` predicates.
+
+## License
+
+This project is licensed under the Mozilla Public License 2.0.
+
+See [LICENSE](LICENSE) for the complete license text and [NOTICE](NOTICE) for project attribution information. Modified MPL-covered files must remain available under MPL-2.0, retain the original notices, and indicate that changes were made.

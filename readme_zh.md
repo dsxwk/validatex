@@ -557,3 +557,9 @@ go test ./...
 ### 最低 Go 版本是多少？
 
 需要 Go `1.27.0` 或更高版本。
+
+## 许可证
+
+本项目采用 Mozilla Public License 2.0。
+
+完整许可证见 [LICENSE](LICENSE)，项目来源和修改说明见 [NOTICE](NOTICE)。修改后的 MPL 覆盖文件必须继续使用 MPL-2.0，保留原始声明，并注明进行了修改。
