@@ -384,7 +384,7 @@ errs := validatex.Nullable(request.Email, func(value string) validatex.Errors {
 })
 ```
 
-`nil` 指针会跳过校验；非 `nil` 指针会使用解引用后的值执行校验。如果 JSON 字段缺失和显式 `null` 需要区分，应在绑定层使用额外字段记录存在状态。
+请求校验入口接收请求指针。`nil` 指针会跳过校验；非 `nil` 指针会使用解引用后的值执行校验。如果 JSON 字段缺失和显式 `null` 需要区分，应在绑定层使用额外字段记录存在状态。
 
 ## 嵌套校验
 
@@ -461,7 +461,7 @@ func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validate
 框架绑定只需要组合 `NewRequestTranslator`、`ValidateRequestWithTranslator` 和通用响应：
 
 ```go
-func Bind[T validatex.Validatable](c *gin.Context, request T, scene string) bool {
+func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, scene string) bool {
 	translator := validatex.NewRequestTranslator(request)
 	if err := c.ShouldBindJSON(request); err != nil {
 		response := validatex.NewBindErrorResponse(err.Error(), "参数格式错误")

@@ -7,14 +7,21 @@ func NewRequestTranslator(request any) *Translator {
 	return translator
 }
 
+// ValidatablePointer 约束可校验的请求指针类型。
+// T 为指针指向的请求类型；使用该约束的请求参数保持具体指针类型，因此可以直接与 nil 比较。
+type ValidatablePointer[T any] interface {
+	Validatable
+	~*T
+}
+
 // ValidateRequest 使用默认翻译器校验请求,无翻译配置时翻译器为nil
-func ValidateRequest[T Validatable](request T, scene string) Errors {
+func ValidateRequest[T any, P ValidatablePointer[T]](request P, scene string) Errors {
 	return ValidateRequestWithTranslator(request, scene, nil)
 }
 
 // ValidateRequestWithTranslator 使用指定翻译器校验请求
-func ValidateRequestWithTranslator[T Validatable](request T, scene string, translator *Translator) Errors {
-	if any(request) == nil {
+func ValidateRequestWithTranslator[T any, P ValidatablePointer[T]](request P, scene string, translator *Translator) Errors {
+	if request == nil {
 		return nil
 	}
 	if translator == nil {

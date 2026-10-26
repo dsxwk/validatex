@@ -303,7 +303,7 @@ errs := validatex.Nullable(request.Email, func(value string) validatex.Errors {
 })
 ```
 
-A `nil` pointer skips validation. If JSON missing fields must be distinguished from explicit `null`, record presence in the binding layer.
+Request validation entry points accept a request pointer. A `nil` pointer skips validation. If JSON missing fields must be distinguished from explicit `null`, record presence in the binding layer.
 
 ## Nested Validation
 
@@ -379,7 +379,7 @@ func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validate
 The package intentionally contains no Web framework dependency. A Gin integration can be implemented in the consuming application:
 
 ```go
-func Bind[T validatex.Validatable](c *gin.Context, request T, scene string) bool {
+func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, scene string) bool {
 	translator := validatex.NewRequestTranslator(request)
 	if err := c.ShouldBindJSON(request); err != nil {
 		response := validatex.NewBindErrorResponse(err.Error(), "Invalid request")
