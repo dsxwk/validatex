@@ -58,10 +58,9 @@ func (f *StringField) Max(n int) *StringField {
 // Between 校验字符串字符数范围
 func (f *StringField) Between(min, max int) *StringField {
 	length := utf8.RuneCountInString(f.value)
-	f.check("between", f.value != "" && (length < min || length > max), map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if f.value != "" && (length < min || length > max) {
+		f.check("between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -130,7 +129,9 @@ func (f *StringField) StartsWith(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("starts_with", f.value != "" && !valid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && !valid {
+		f.check("starts_with", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
@@ -143,7 +144,9 @@ func (f *StringField) DoesntStartWith(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("doesnt_start_with", f.value != "" && invalid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && invalid {
+		f.check("doesnt_start_with", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
@@ -156,7 +159,9 @@ func (f *StringField) EndsWith(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("ends_with", f.value != "" && !valid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && !valid {
+		f.check("ends_with", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
@@ -169,7 +174,9 @@ func (f *StringField) DoesntEndWith(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("doesnt_end_with", f.value != "" && invalid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && invalid {
+		f.check("doesnt_end_with", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
@@ -182,7 +189,9 @@ func (f *StringField) Contains(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("contains", f.value != "" && !valid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && !valid {
+		f.check("contains", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
@@ -195,98 +204,145 @@ func (f *StringField) DoesntContain(values ...string) *StringField {
 			break
 		}
 	}
-	f.check("doesnt_contain", f.value != "" && invalid, map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && invalid {
+		f.check("doesnt_contain", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
 // In 校验字符串属于指定集合
 func (f *StringField) In(values ...string) *StringField {
-	f.check("in", f.value != "" && !containsString(values, f.value), map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && !slices.Contains(values, f.value) {
+		f.check("in", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
 // NotIn 校验字符串不属于指定集合
 func (f *StringField) NotIn(values ...string) *StringField {
-	f.check("not_in", f.value != "" && containsString(values, f.value), map[string]any{"values": strings.Join(values, ",")})
+	if f.value != "" && slices.Contains(values, f.value) {
+		f.check("not_in", true, arg("values", strings.Join(values, ",")))
+	}
 	return f
 }
 
 // Regex 校验字符串匹配正则
 func (f *StringField) Regex(pattern string) *StringField {
+	if f.value == "" {
+		return f
+	}
 	matched, err := regexp.MatchString(pattern, f.value)
-	f.check("regex", f.value != "" && (err != nil || !matched), map[string]any{"pattern": pattern})
+	if err != nil || !matched {
+		f.check("regex", true, arg("pattern", pattern))
+	}
 	return f
 }
 
 // Regexp 使用预编译正则校验字符串
 func (f *StringField) Regexp(pattern *regexp.Regexp) *StringField {
-	f.check("regex", pattern == nil || f.value != "" && !pattern.MatchString(f.value))
+	if f.value == "" {
+		return f
+	}
+	f.check("regex", pattern == nil || !pattern.MatchString(f.value))
 	return f
 }
 
 // NotRegex 校验字符串不匹配正则
 func (f *StringField) NotRegex(pattern string) *StringField {
+	if f.value == "" {
+		return f
+	}
 	matched, err := regexp.MatchString(pattern, f.value)
-	f.check("not_regex", f.value != "" && (err != nil || matched), map[string]any{"pattern": pattern})
+	if err != nil || matched {
+		f.check("not_regex", true, arg("pattern", pattern))
+	}
 	return f
 }
 
 // NotRegexp 使用预编译正则校验字符串
 func (f *StringField) NotRegexp(pattern *regexp.Regexp) *StringField {
-	f.check("not_regex", pattern == nil || f.value != "" && pattern.MatchString(f.value))
+	if f.value == "" {
+		return f
+	}
+	f.check("not_regex", pattern == nil || pattern.MatchString(f.value))
 	return f
 }
 
 // Numeric 校验字符串为数字
 func (f *StringField) Numeric() *StringField {
-	_, err := strconv.ParseFloat(f.value, 64)
-	f.check("numeric", f.value != "" && err != nil)
+	f.check("numeric", f.value != "" && !isNumericString(f.value))
 	return f
 }
 
 // Integer 校验字符串为整数
 func (f *StringField) Integer() *StringField {
+	if f.value == "" {
+		return f
+	}
 	_, err := strconv.ParseInt(f.value, 10, 64)
-	f.check("integer", f.value != "" && err != nil)
+	f.check("integer", err != nil)
 	return f
 }
 
 // Decimal 校验字符串小数位数
 func (f *StringField) Decimal(places ...int) *StringField {
-	value := strings.TrimPrefix(strings.TrimPrefix(f.value, "+"), "-")
-	parts := strings.Split(value, ".")
-	valid := len(parts) >= 1 && len(parts) <= 2 && parts[0] != ""
-	if valid {
-		for _, part := range parts {
-			if part == "" || strings.IndexFunc(part, func(r rune) bool {
-				return r < '0' || r > '9'
-			}) >= 0 {
-				valid = false
-				break
-			}
-		}
-	}
-	decimalPlaces := 0
-	if len(parts) == 2 {
-		decimalPlaces = len(parts[1])
-	}
+	decimalPlaces, valid := decimalPlaces(f.value)
 	if valid && len(places) > 0 {
 		valid = decimalPlaces >= places[0]
 	}
 	if valid && len(places) > 1 {
 		valid = decimalPlaces <= places[1]
 	}
-	f.check("decimal", f.value != "" && !valid, map[string]any{
-		"min": placesValue(places, 0),
-		"max": placesValue(places, 1),
-	})
+	if f.value != "" && !valid {
+		f.check("decimal", true,
+			arg("min", placesValue(places, 0)),
+			arg("max", placesValue(places, 1)),
+		)
+	}
 	return f
+}
+
+// decimalPlaces 返回合法十进制数的小数位数
+func decimalPlaces(value string) (int, bool) {
+	if value == "" {
+		return 0, false
+	}
+
+	index := 0
+	if value[index] == '+' || value[index] == '-' {
+		index++
+	}
+	integerStart := index
+	for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+		index++
+	}
+	if index == integerStart {
+		return 0, false
+	}
+	if index == len(value) {
+		return 0, true
+	}
+	if value[index] != '.' {
+		return 0, false
+	}
+
+	index++
+	fractionStart := index
+	for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+		index++
+	}
+	if index != len(value) || index == fractionStart {
+		return 0, false
+	}
+	return index - fractionStart, true
 }
 
 // Digits 校验数字字符串长度
 func (f *StringField) Digits(n int) *StringField {
 	valid := isDigits(f.value) && len(f.value) == n
-	f.check("digits", f.value != "" && !valid, map[string]any{"digits": n})
+	if f.value != "" && !valid {
+		f.check("digits", true, arg("digits", n))
+	}
 	return f
 }
 
@@ -294,78 +350,107 @@ func (f *StringField) Digits(n int) *StringField {
 func (f *StringField) DigitsBetween(min, max int) *StringField {
 	length := len(f.value)
 	valid := isDigits(f.value) && length >= min && length <= max
-	f.check("digits_between", f.value != "" && !valid, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if f.value != "" && !valid {
+		f.check("digits_between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
 // URL 校验URL格式
 func (f *StringField) URL() *StringField {
+	if f.value == "" {
+		return f
+	}
 	parsed, err := url.ParseRequestURI(f.value)
-	f.check("url", f.value != "" && (err != nil || parsed.Scheme == "" || parsed.Host == ""))
+	f.check("url", err != nil || parsed.Scheme == "" || parsed.Host == "")
 	return f
 }
 
 // IP 校验IP地址格式
 func (f *StringField) IP() *StringField {
-	f.check("ip", f.value != "" && net.ParseIP(f.value) == nil)
+	if f.value == "" {
+		return f
+	}
+	f.check("ip", net.ParseIP(f.value) == nil)
 	return f
 }
 
 // IPv4 校验IPv4地址格式
 func (f *StringField) IPv4() *StringField {
+	if f.value == "" {
+		return f
+	}
 	ip := net.ParseIP(f.value)
-	f.check("ipv4", f.value != "" && (ip == nil || ip.To4() == nil))
+	f.check("ipv4", ip == nil || ip.To4() == nil)
 	return f
 }
 
 // IPv6 校验IPv6地址格式
 func (f *StringField) IPv6() *StringField {
+	if f.value == "" {
+		return f
+	}
 	ip := net.ParseIP(f.value)
-	f.check("ipv6", f.value != "" && (ip == nil || ip.To4() != nil))
+	f.check("ipv6", ip == nil || ip.To4() != nil)
 	return f
 }
 
 // MACAddress 校验MAC地址格式
 func (f *StringField) MACAddress() *StringField {
+	if f.value == "" {
+		return f
+	}
 	_, err := net.ParseMAC(f.value)
-	f.check("mac_address", f.value != "" && err != nil)
+	f.check("mac_address", err != nil)
 	return f
 }
 
 // UUID 校验UUID格式
 func (f *StringField) UUID() *StringField {
+	if f.value == "" {
+		return f
+	}
 	matched := uuidPattern.MatchString(f.value)
-	f.check("uuid", f.value != "" && !matched)
+	f.check("uuid", !matched)
 	return f
 }
 
 // ULID 校验ULID格式
 func (f *StringField) ULID() *StringField {
+	if f.value == "" {
+		return f
+	}
 	matched := ulidPattern.MatchString(f.value)
-	f.check("ulid", f.value != "" && !matched)
+	f.check("ulid", !matched)
 	return f
 }
 
 // HexColor 校验十六进制颜色格式
 func (f *StringField) HexColor() *StringField {
+	if f.value == "" {
+		return f
+	}
 	matched := hexColorPattern.MatchString(f.value)
-	f.check("hex_color", f.value != "" && !matched)
+	f.check("hex_color", !matched)
 	return f
 }
 
 // Timezone 校验时区名称
 func (f *StringField) Timezone() *StringField {
+	if f.value == "" {
+		return f
+	}
 	_, err := time.LoadLocation(f.value)
-	f.check("timezone", f.value != "" && err != nil)
+	f.check("timezone", err != nil)
 	return f
 }
 
 // JSON 校验JSON格式
 func (f *StringField) JSON() *StringField {
-	f.check("json", f.value != "" && !json.Valid([]byte(f.value)))
+	if f.value == "" {
+		return f
+	}
+	f.check("json", !json.Valid([]byte(f.value)))
 	return f
 }
 
@@ -401,13 +486,13 @@ func (f *StringField) Boolean() *StringField {
 
 // Same 校验字符串与目标值相同
 func (f *StringField) Same(value string) *StringField {
-	f.check("same", f.value != value, map[string]any{"value": value})
+	f.check("same", f.value != value, value)
 	return f
 }
 
 // Different 校验字符串与目标值不同
 func (f *StringField) Different(value string) *StringField {
-	f.check("different", f.value == value, map[string]any{"value": value})
+	f.check("different", f.value == value, value)
 	return f
 }
 
@@ -419,56 +504,79 @@ func (f *StringField) Confirmed(value string) *StringField {
 
 // Date 校验日期格式
 func (f *StringField) Date() *StringField {
+	if f.value == "" {
+		return f
+	}
 	_, valid := parseDate(f.value)
-	f.check("date", f.value != "" && !valid)
+	f.check("date", !valid)
 	return f
 }
 
 // DateFormat 按指定布局校验日期
 func (f *StringField) DateFormat(layout string) *StringField {
+	if f.value == "" {
+		return f
+	}
 	_, err := time.Parse(layout, f.value)
-	f.check("date_format", f.value != "" && err != nil, map[string]any{"format": layout})
+	if err != nil {
+		f.check("date_format", true, arg("format", layout))
+	}
 	return f
 }
 
 // DateEquals 校验日期与目标日期相同
 func (f *StringField) DateEquals(value string) *StringField {
+	if f.value == "" {
+		return f
+	}
 	date, valid := parseDate(f.value)
 	target, targetValid := parseDate(value)
-	invalid := f.value != "" && (!valid || !targetValid || !sameDate(date, target))
-	f.check("date_equals", invalid, map[string]any{"value": value})
+	invalid := !valid || !targetValid || !sameDate(date, target)
+	f.check("date_equals", invalid, value)
 	return f
 }
 
 // Before 校验日期早于目标日期
 func (f *StringField) Before(value string) *StringField {
-	f.check("before", f.value != "" && !compareDate(f.value, value, func(date, target time.Time) bool {
+	if f.value == "" {
+		return f
+	}
+	f.check("before", !compareDate(f.value, value, func(date, target time.Time) bool {
 		return date.Before(target)
-	}), map[string]any{"value": value})
+	}), value)
 	return f
 }
 
 // BeforeOrEqual 校验日期不晚于目标日期
 func (f *StringField) BeforeOrEqual(value string) *StringField {
-	f.check("before_or_equal", f.value != "" && !compareDate(f.value, value, func(date, target time.Time) bool {
+	if f.value == "" {
+		return f
+	}
+	f.check("before_or_equal", !compareDate(f.value, value, func(date, target time.Time) bool {
 		return date.Before(target) || date.Equal(target)
-	}), map[string]any{"value": value})
+	}), value)
 	return f
 }
 
 // After 校验日期晚于目标日期
 func (f *StringField) After(value string) *StringField {
-	f.check("after", f.value != "" && !compareDate(f.value, value, func(date, target time.Time) bool {
+	if f.value == "" {
+		return f
+	}
+	f.check("after", !compareDate(f.value, value, func(date, target time.Time) bool {
 		return date.After(target)
-	}), map[string]any{"value": value})
+	}), value)
 	return f
 }
 
 // AfterOrEqual 校验日期不早于目标日期
 func (f *StringField) AfterOrEqual(value string) *StringField {
-	f.check("after_or_equal", f.value != "" && !compareDate(f.value, value, func(date, target time.Time) bool {
+	if f.value == "" {
+		return f
+	}
+	f.check("after_or_equal", !compareDate(f.value, value, func(date, target time.Time) bool {
 		return date.After(target) || date.Equal(target)
-	}), map[string]any{"value": value})
+	}), value)
 	return f
 }
 
@@ -482,19 +590,135 @@ func matchRunes(value string, valid func(rune) bool) bool {
 	return true
 }
 
-// containsString 判断字符串切片是否包含目标值
-func containsString(values []string, target string) bool {
-	return slices.Contains(values, target)
-}
-
 // isDigits 判断字符串是否仅包含数字
 func isDigits(value string) bool {
 	if value == "" {
 		return false
 	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
+	for index := 0; index < len(value); index++ {
+		if value[index] < '0' || value[index] > '9' {
 			return false
+		}
+	}
+	return true
+}
+
+// isNumericString 判断字符串是否为十进制数字,支持小数和科学计数法
+func isNumericString(value string) bool {
+	if value == "" {
+		return false
+	}
+
+	index := 0
+	if value[index] == '+' || value[index] == '-' {
+		index++
+		if index == len(value) {
+			return false
+		}
+	}
+
+	digits := 0
+	for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+		index++
+		digits++
+	}
+	if index < len(value) && value[index] == '.' {
+		index++
+		for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+			index++
+			digits++
+		}
+	}
+	if digits == 0 {
+		return false
+	}
+
+	if index < len(value) && (value[index] == 'e' || value[index] == 'E') {
+		index++
+		if index < len(value) && (value[index] == '+' || value[index] == '-') {
+			index++
+		}
+		exponentDigits := 0
+		for index < len(value) && value[index] >= '0' && value[index] <= '9' {
+			index++
+			exponentDigits++
+		}
+		if exponentDigits == 0 {
+			return false
+		}
+	}
+
+	return index == len(value)
+}
+
+// isEmail 判断字符串是否为常见 ASCII 邮箱格式
+func isEmail(value string) bool {
+	if value == "" || len(value) > 254 {
+		return false
+	}
+
+	at := strings.LastIndexByte(value, '@')
+	if at <= 0 || at == len(value)-1 {
+		return false
+	}
+	local, domain := value[:at], value[at+1:]
+	if len(local) > 64 || local[0] == '.' || local[len(local)-1] == '.' || strings.Contains(local, "..") {
+		return false
+	}
+	for index := 0; index < len(local); index++ {
+		character := local[index]
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			character == '.' || character == '_' || character == '%' || character == '+' || character == '-' {
+			continue
+		}
+		return false
+	}
+
+	labelStart := 0
+	labels := 0
+	lastDot := -1
+	for index := 0; index < len(domain); index++ {
+		character := domain[index]
+		if character == '.' {
+			labelLength := index - labelStart
+			if labelLength == 0 || labelLength > 63 || domain[labelStart] == '-' || domain[index-1] == '-' {
+				return false
+			}
+			labels++
+			lastDot = index
+			labelStart = index + 1
+			continue
+		}
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			character == '-' {
+			continue
+		}
+		return false
+	}
+
+	labelLength := len(domain) - labelStart
+	if labelLength == 0 || labelLength > 63 || domain[labelStart] == '-' || domain[len(domain)-1] == '-' {
+		return false
+	}
+	labels++
+	if labels < 2 {
+		return false
+	}
+
+	topLevel := domain[lastDot+1:]
+	if len(topLevel) < 2 {
+		return false
+	}
+	for index := 0; index < len(topLevel); index++ {
+		character := topLevel[index]
+		if character < 'a' || character > 'z' {
+			if character < 'A' || character > 'Z' {
+				return false
+			}
 		}
 	}
 	return true
@@ -502,22 +726,20 @@ func isDigits(value string) bool {
 
 // isAccepted 判断字符串是否为接受值
 func isAccepted(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "yes", "on", "1", "true":
-		return true
-	default:
-		return false
-	}
+	value = strings.TrimSpace(value)
+	return strings.EqualFold(value, "yes") ||
+		strings.EqualFold(value, "on") ||
+		value == "1" ||
+		strings.EqualFold(value, "true")
 }
 
 // isDeclined 判断字符串是否为拒绝值
 func isDeclined(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "no", "off", "0", "false":
-		return true
-	default:
-		return false
-	}
+	value = strings.TrimSpace(value)
+	return strings.EqualFold(value, "no") ||
+		strings.EqualFold(value, "off") ||
+		value == "0" ||
+		strings.EqualFold(value, "false")
 }
 
 // parseDate 解析常用日期格式

@@ -1,60 +1,84 @@
 package validatex
 
 // NewRequestTranslator 创建请求翻译器
-func NewRequestTranslator(request any) *Translator {
+func NewRequestTranslator[T any, P PointerTo[T]](request P) *Translator {
 	translator := NewTranslator()
-	applyRequestTranslations(translator, request)
+	if request == nil {
+		return translator
+	}
+	applyRequestTranslations(request, translator)
 	return translator
 }
 
-// ValidatablePointer 约束可校验的请求指针类型。
-// T 为指针指向的请求类型；使用该约束的请求参数保持具体指针类型，因此可以直接与 nil 比较。
-type ValidatablePointer[T any] interface {
-	Validatable
+// PointerTo 约束具体指针类型,T为指针指向的值类型
+type PointerTo[T any] interface {
 	~*T
 }
 
-// ValidateRequest 使用默认翻译器校验请求,无翻译配置时翻译器为nil
-func ValidateRequest[T any, P ValidatablePointer[T]](request P, scene string) Errors {
-	return ValidateRequestWithTranslator(request, scene, nil)
+// ValidatablePointer 约束可校验的请求指针类型
+// T为指针指向的请求类型
+type ValidatablePointer[T any] interface {
+	Validatable
+	PointerTo[T]
+}
+
+// SceneValidatablePointer 约束场景校验请求指针类型
+// T为指针指向的请求类型
+type SceneValidatablePointer[T any] interface {
+	SceneValidatable
+	PointerTo[T]
+}
+
+// ValidateRequest 使用默认翻译器校验请求
+func ValidateRequest[T any, P ValidatablePointer[T]](request P) Errors {
+	return ValidateRequestWithTranslator(request, nil)
 }
 
 // ValidateRequestWithTranslator 使用指定翻译器校验请求
-func ValidateRequestWithTranslator[T any, P ValidatablePointer[T]](request P, scene string, translator *Translator) Errors {
+func ValidateRequestWithTranslator[T any, P ValidatablePointer[T]](request P, translator *Translator) Errors {
 	if request == nil {
 		return nil
 	}
 	if translator == nil {
 		translator = requestTranslator(request)
 	}
-	if validator, ok := any(request).(SceneValidatable); ok {
-		return validator.ValidateWithScene(scene, translator)
-	}
 	return request.Validate(translator)
+}
+
+// ValidateSceneRequest 使用默认翻译器校验场景请求
+func ValidateSceneRequest[T any, P SceneValidatablePointer[T]](request P, scene string) Errors {
+	return ValidateSceneRequestWithTranslator(request, scene, nil)
+}
+
+// ValidateSceneRequestWithTranslator 使用指定翻译器校验场景请求
+func ValidateSceneRequestWithTranslator[T any, P SceneValidatablePointer[T]](request P, scene string, translator *Translator) Errors {
+	if request == nil {
+		return nil
+	}
+	if translator == nil {
+		translator = requestTranslator(request)
+	}
+	return request.ValidateWithScene(scene, translator)
 }
 
 // requestTranslator 创建只读请求翻译器
 func requestTranslator(request any) *Translator {
-	_, hasTranslates := request.(TranslatesProvider)
-	_, hasMessages := request.(MessagesProvider)
-	if !hasTranslates && !hasMessages {
+	_, providesTranslates := request.(TranslatesProvider)
+	_, providesMessages := request.(MessagesProvider)
+	if !providesTranslates && !providesMessages {
 		return nil
 	}
 	translator := &Translator{}
-	applyRequestTranslations(translator, request)
+	applyRequestTranslations(request, translator)
 	return translator
 }
 
 // applyRequestTranslations 应用请求翻译配置
-func applyRequestTranslations(translator *Translator, request any) bool {
-	applied := false
+func applyRequestTranslations(request any, translator *Translator) {
 	if provider, ok := request.(TranslatesProvider); ok {
 		translator.Translates = provider.Translates()
-		applied = true
 	}
 	if provider, ok := request.(MessagesProvider); ok {
 		translator.Messages = provider.Messages()
-		applied = true
 	}
-	return applied
 }

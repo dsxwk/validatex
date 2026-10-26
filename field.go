@@ -5,8 +5,8 @@ import (
 	"unicode/utf8"
 )
 
-// integer 定义整数类型约束
-type integer interface {
+// Integer 定义内置整数类型约束
+type Integer interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
@@ -39,30 +39,54 @@ func (f *baseField[T]) checkPath(path, rule, message string, invalid bool, args 
 	if !invalid {
 		return
 	}
+	f.addError(path, displayField(f.translator, path), rule, message, args...)
+}
+
+// checkPathDisplay 按指定路径和字段显示名添加字段错误
+func (f *baseField[T]) checkPathDisplay(path, display, rule, message string, args ...any) {
+	f.addError(path, display, rule, message, args...)
+}
+
+// addError 添加已经确定无效的字段错误
+func (f *baseField[T]) addError(path, display, rule, message string, args ...any) {
 	template := message
+	source := sourceTemplate
 	if message == "" {
-		message = translate(f.translator, path, rule, args...)
+		source = sourceRule
+		message = translateDisplay(f.translator, path, display, rule, args...)
 	} else {
-		message = formatMessage(f.translator, message, path, rule, args...)
+		message = formatMessage(message, path, display, rule, args...)
 	}
 	fieldError := FieldError{
 		Path:     path,
 		Rule:     rule,
 		Msg:      message,
 		template: template,
-		argCount: len(args),
+		source:   source,
 	}
 	if len(args) == 1 {
 		fieldError.arg = args[0]
+		fieldError.hasArg = true
 	} else if len(args) > 1 {
 		fieldError.args = append([]any(nil), args...)
 	}
 	f.errs = append(f.errs, fieldError)
 }
 
+// messageArg 定义带名称的消息占位符参数
+type messageArg struct {
+	name  string
+	value any
+}
+
+// arg 创建带名称的消息占位符参数
+func arg(name string, value any) messageArg {
+	return messageArg{name: name, value: value}
+}
+
 // custom 执行自定义校验规则
 func (f *baseField[T]) custom(rule, message string, valid func(T) bool, args ...any) {
-	f.checkMessage(rule, message, !valid(f.value), args...)
+	f.checkMessage(rule, message, valid == nil || !valid(f.value), args...)
 }
 
 // Errors 返回字段错误
@@ -94,7 +118,7 @@ func (f *StringField) Min(n int) *StringField {
 
 // Email 校验邮箱格式
 func (f *StringField) Email() *StringField {
-	f.check("email", f.value != "" && !emailPattern.MatchString(f.value))
+	f.check("email", f.value != "" && !isEmail(f.value))
 	return f
 }
 
@@ -105,12 +129,12 @@ func (f *StringField) Rule(rule, message string, valid func(string) bool, args .
 }
 
 // IntField 整数字段校验器
-type IntField[T integer] struct {
+type IntField[T Integer] struct {
 	baseField[T]
 }
 
 // Int 创建整数字段校验器
-func Int[T integer](translator *Translator, path string, value T) *IntField[T] {
+func Int[T Integer](translator *Translator, path string, value T) *IntField[T] {
 	return &IntField[T]{baseField: newBaseField(translator, path, value)}
 }
 

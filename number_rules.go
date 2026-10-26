@@ -3,12 +3,20 @@ package validatex
 import (
 	"fmt"
 	"math"
-	"strings"
+	"math/big"
+	"slices"
 )
 
-// floatValue 定义浮点类型约束
-type floatValue interface {
+// FloatValue 定义内置浮点类型约束
+type FloatValue interface {
 	~float32 | ~float64
+}
+
+// Required 校验整数必填
+func (f *IntField[T]) Required() *IntField[T] {
+	var zero T
+	f.check("required", f.value == zero)
+	return f
 }
 
 // RequiredIf 条件成立时校验整数必填
@@ -54,10 +62,9 @@ func (f *IntField[T]) Max(n T) *IntField[T] {
 
 // Between 校验整数范围
 func (f *IntField[T]) Between(min, max T) *IntField[T] {
-	f.check("between", f.value < min || f.value > max, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if f.value < min || f.value > max {
+		f.check("between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -69,59 +76,64 @@ func (f *IntField[T]) Size(n T) *IntField[T] {
 
 // Gt 校验整数大于目标值
 func (f *IntField[T]) Gt(n T) *IntField[T] {
-	f.check("gt", f.value <= n, map[string]any{"value": n})
+	f.check("gt", f.value <= n, n)
 	return f
 }
 
 // Gte 校验整数大于等于目标值
 func (f *IntField[T]) Gte(n T) *IntField[T] {
-	f.check("gte", f.value < n, map[string]any{"value": n})
+	f.check("gte", f.value < n, n)
 	return f
 }
 
 // Lt 校验整数小于目标值
 func (f *IntField[T]) Lt(n T) *IntField[T] {
-	f.check("lt", f.value >= n, map[string]any{"value": n})
+	f.check("lt", f.value >= n, n)
 	return f
 }
 
 // Lte 校验整数小于等于目标值
 func (f *IntField[T]) Lte(n T) *IntField[T] {
-	f.check("lte", f.value > n, map[string]any{"value": n})
+	f.check("lte", f.value > n, n)
 	return f
 }
 
 // In 校验整数属于指定集合
 func (f *IntField[T]) In(values ...T) *IntField[T] {
-	f.check("in", !containsValue(values, f.value), map[string]any{"values": fmt.Sprint(values)})
+	if !slices.Contains(values, f.value) {
+		f.check("in", true, arg("values", fmt.Sprint(values)))
+	}
 	return f
 }
 
 // NotIn 校验整数不属于指定集合
 func (f *IntField[T]) NotIn(values ...T) *IntField[T] {
-	f.check("not_in", containsValue(values, f.value), map[string]any{"values": fmt.Sprint(values)})
+	if slices.Contains(values, f.value) {
+		f.check("not_in", true, arg("values", fmt.Sprint(values)))
+	}
 	return f
 }
 
 // MultipleOf 校验整数为指定值的倍数
 func (f *IntField[T]) MultipleOf(n T) *IntField[T] {
-	f.check("multiple_of", n == 0 || f.value%n != 0, map[string]any{"value": n})
+	f.check("multiple_of", n == 0 || f.value%n != 0, n)
 	return f
 }
 
 // Digits 校验整数位数
 func (f *IntField[T]) Digits(n int) *IntField[T] {
-	f.check("digits", integerDigits(f.value) != n, map[string]any{"digits": n})
+	if integerDigits(f.value) != n {
+		f.check("digits", true, arg("digits", n))
+	}
 	return f
 }
 
 // DigitsBetween 校验整数位数范围
 func (f *IntField[T]) DigitsBetween(min, max int) *IntField[T] {
 	digits := integerDigits(f.value)
-	f.check("digits_between", digits < min || digits > max, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if digits < min || digits > max {
+		f.check("digits_between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -141,24 +153,31 @@ func (f *IntField[T]) Negative() *IntField[T] {
 
 // Same 校验整数与目标值相同
 func (f *IntField[T]) Same(value T) *IntField[T] {
-	f.check("same", f.value != value, map[string]any{"value": value})
+	f.check("same", f.value != value, value)
 	return f
 }
 
 // Different 校验整数与目标值不同
 func (f *IntField[T]) Different(value T) *IntField[T] {
-	f.check("different", f.value == value, map[string]any{"value": value})
+	f.check("different", f.value == value, value)
 	return f
 }
 
 // FloatField 浮点字段校验器
-type FloatField[T floatValue] struct {
+type FloatField[T FloatValue] struct {
 	baseField[T]
 }
 
 // Float 创建浮点字段校验器
-func Float[T floatValue](translator *Translator, path string, value T) *FloatField[T] {
+func Float[T FloatValue](translator *Translator, path string, value T) *FloatField[T] {
 	return &FloatField[T]{baseField: newBaseField(translator, path, value)}
+}
+
+// Required 校验浮点数必填
+func (f *FloatField[T]) Required() *FloatField[T] {
+	var zero T
+	f.check("required", f.value == zero)
+	return f
 }
 
 // RequiredIf 条件成立时校验浮点数必填
@@ -217,10 +236,9 @@ func (f *FloatField[T]) Max(n T) *FloatField[T] {
 // Between 校验浮点数范围
 func (f *FloatField[T]) Between(min, max T) *FloatField[T] {
 	invalid := !isFinite(f.value) || !isFinite(min) || !isFinite(max) || f.value < min || f.value > max
-	f.check("between", invalid, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if invalid {
+		f.check("between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -232,50 +250,47 @@ func (f *FloatField[T]) Size(n T) *FloatField[T] {
 
 // Gt 校验浮点数大于目标值
 func (f *FloatField[T]) Gt(n T) *FloatField[T] {
-	f.check("gt", !isFinite(f.value) || !isFinite(n) || f.value <= n, map[string]any{"value": n})
+	f.check("gt", !isFinite(f.value) || !isFinite(n) || f.value <= n, n)
 	return f
 }
 
 // Gte 校验浮点数大于等于目标值
 func (f *FloatField[T]) Gte(n T) *FloatField[T] {
-	f.check("gte", !isFinite(f.value) || !isFinite(n) || f.value < n, map[string]any{"value": n})
+	f.check("gte", !isFinite(f.value) || !isFinite(n) || f.value < n, n)
 	return f
 }
 
 // Lt 校验浮点数小于目标值
 func (f *FloatField[T]) Lt(n T) *FloatField[T] {
-	f.check("lt", !isFinite(f.value) || !isFinite(n) || f.value >= n, map[string]any{"value": n})
+	f.check("lt", !isFinite(f.value) || !isFinite(n) || f.value >= n, n)
 	return f
 }
 
 // Lte 校验浮点数小于等于目标值
 func (f *FloatField[T]) Lte(n T) *FloatField[T] {
-	f.check("lte", !isFinite(f.value) || !isFinite(n) || f.value > n, map[string]any{"value": n})
+	f.check("lte", !isFinite(f.value) || !isFinite(n) || f.value > n, n)
 	return f
 }
 
 // In 校验浮点数属于指定集合
 func (f *FloatField[T]) In(values ...T) *FloatField[T] {
-	f.check("in", !isFinite(f.value) || !containsValue(values, f.value), map[string]any{"values": fmt.Sprint(values)})
+	if !isFinite(f.value) || !slices.Contains(values, f.value) {
+		f.check("in", true, arg("values", fmt.Sprint(values)))
+	}
 	return f
 }
 
 // NotIn 校验浮点数不属于指定集合
 func (f *FloatField[T]) NotIn(values ...T) *FloatField[T] {
-	f.check("not_in", isFinite(f.value) && containsValue(values, f.value), map[string]any{"values": fmt.Sprint(values)})
+	if isFinite(f.value) && slices.Contains(values, f.value) {
+		f.check("not_in", true, arg("values", fmt.Sprint(values)))
+	}
 	return f
 }
 
 // MultipleOf 校验浮点数为指定值的倍数
 func (f *FloatField[T]) MultipleOf(n T) *FloatField[T] {
-	value := float64(f.value)
-	divisor := float64(n)
-	invalid := !isFinite(f.value) || !isFinite(n) || divisor == 0
-	if !invalid {
-		remainder := math.Mod(value, divisor)
-		invalid = math.Abs(remainder) > 1e-9
-	}
-	f.check("multiple_of", invalid, map[string]any{"value": n})
+	f.check("multiple_of", !isFloatMultipleOf(f.value, n), n)
 	return f
 }
 
@@ -295,13 +310,13 @@ func (f *FloatField[T]) Negative() *FloatField[T] {
 
 // Same 校验浮点数与目标值相同
 func (f *FloatField[T]) Same(value T) *FloatField[T] {
-	f.check("same", !isFinite(f.value) || !isFinite(value) || f.value != value, map[string]any{"value": value})
+	f.check("same", !isFinite(f.value) || !isFinite(value) || f.value != value, value)
 	return f
 }
 
 // Different 校验浮点数与目标值不同
 func (f *FloatField[T]) Different(value T) *FloatField[T] {
-	f.check("different", isFinite(f.value) && isFinite(value) && f.value == value, map[string]any{"value": value})
+	f.check("different", isFinite(f.value) && isFinite(value) && f.value == value, value)
 	return f
 }
 
@@ -312,22 +327,33 @@ func (f *FloatField[T]) Rule(rule, message string, valid func(T) bool, args ...a
 }
 
 // isFinite 判断浮点数是否为有限值
-func isFinite[T floatValue](value T) bool {
+func isFinite[T FloatValue](value T) bool {
 	result := float64(value)
 	return !math.IsNaN(result) && !math.IsInf(result, 0)
 }
 
-// containsValue 判断切片是否包含目标值
-func containsValue[T comparable](values []T, target T) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
+// isFloatMultipleOf 按十进制表示判断浮点数是否为指定值的倍数
+func isFloatMultipleOf[T FloatValue](value, divisor T) bool {
+	if !isFinite(value) || !isFinite(divisor) {
+		return false
 	}
-	return false
+	valueRat, valueOK := new(big.Rat).SetString(fmt.Sprint(value))
+	divisorRat, divisorOK := new(big.Rat).SetString(fmt.Sprint(divisor))
+	if !valueOK || !divisorOK || divisorRat.Sign() == 0 {
+		return false
+	}
+	return new(big.Rat).Quo(valueRat, divisorRat).IsInt()
 }
 
 // integerDigits 获取整数的十进制位数
-func integerDigits[T integer](value T) int {
-	return len(strings.TrimPrefix(fmt.Sprint(value), "-"))
+func integerDigits[T Integer](value T) int {
+	digits := 0
+	var zero T
+	for {
+		value /= 10
+		digits++
+		if value == zero {
+			return digits
+		}
+	}
 }

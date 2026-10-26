@@ -1,6 +1,82 @@
 package validatex
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// mapKey 约束Map键为可比较类型
+type mapKey interface {
+	comparable
+}
+
+// formatMapKey 生成Map键的稳定文本
+func formatMapKey[K mapKey](key K) string {
+	var zero K
+	if any(zero) == nil {
+		return fmt.Sprintf("%T:%#v", key, key)
+	}
+	switch value := any(key).(type) {
+	case string:
+		return value
+	case bool:
+		return strconv.FormatBool(value)
+	case int:
+		return strconv.Itoa(value)
+	case int8:
+		return strconv.FormatInt(int64(value), 10)
+	case int16:
+		return strconv.FormatInt(int64(value), 10)
+	case int32:
+		return strconv.FormatInt(int64(value), 10)
+	case int64:
+		return strconv.FormatInt(value, 10)
+	case uint:
+		return strconv.FormatUint(uint64(value), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(value), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(value), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(value), 10)
+	case uint64:
+		return strconv.FormatUint(value, 10)
+	case uintptr:
+		return strconv.FormatUint(uint64(value), 10)
+	case float32:
+		return strconv.FormatFloat(float64(value), 'g', -1, 32)
+	case float64:
+		return strconv.FormatFloat(value, 'g', -1, 64)
+	case complex64:
+		return strconv.FormatComplex(complex128(value), 'g', -1, 64)
+	case complex128:
+		return strconv.FormatComplex(value, 'g', -1, 128)
+	default:
+		return fmt.Sprintf("%#v", key)
+	}
+}
+
+// displayMapKeyText 将空键转换为固定展示名
+func displayMapKeyText(value string) string {
+	if value == "" {
+		return emptyMapKey
+	}
+	return value
+}
+
+// joinMapKeys 格式化Map键列表用于消息占位符
+func joinMapKeys[K mapKey](keys []K) string {
+	var builder strings.Builder
+	for index, key := range keys {
+		if index > 0 {
+			builder.WriteByte(',')
+		}
+		builder.WriteString(displayMapKeyText(formatMapKey(key)))
+	}
+	return builder.String()
+}
 
 // BoolField 布尔字段校验器
 type BoolField struct {
@@ -68,13 +144,13 @@ func (f *BoolField) False() *BoolField {
 
 // Same 校验布尔值与目标值相同
 func (f *BoolField) Same(value bool) *BoolField {
-	f.check("same", f.value != value, map[string]any{"value": value})
+	f.check("same", f.value != value, value)
 	return f
 }
 
 // Different 校验布尔值与目标值不同
 func (f *BoolField) Different(value bool) *BoolField {
-	f.check("different", f.value == value, map[string]any{"value": value})
+	f.check("different", f.value == value, value)
 	return f
 }
 
@@ -144,10 +220,9 @@ func (f *SliceField[T]) Max(n int) *SliceField[T] {
 
 // Between 校验切片元素数范围
 func (f *SliceField[T]) Between(min, max int) *SliceField[T] {
-	f.check("between", len(f.value) < min || len(f.value) > max, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if len(f.value) < min || len(f.value) > max {
+		f.check("between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -159,6 +234,9 @@ func (f *SliceField[T]) Size(n int) *SliceField[T] {
 
 // Distinct 校验切片元素不重复
 func (f *SliceField[T]) Distinct() *SliceField[T] {
+	if len(f.value) < 2 {
+		return f
+	}
 	seen := make(map[T]struct{}, len(f.value))
 	invalid := false
 	for _, value := range f.value {
@@ -174,23 +252,23 @@ func (f *SliceField[T]) Distinct() *SliceField[T] {
 
 // Contains 校验切片包含指定元素
 func (f *SliceField[T]) Contains(value T) *SliceField[T] {
-	f.check("contains", !containsValue(f.value, value), map[string]any{"value": value})
+	f.check("contains", !slices.Contains(f.value, value), value)
 	return f
 }
 
 // DoesntContain 校验切片不包含指定元素
 func (f *SliceField[T]) DoesntContain(value T) *SliceField[T] {
-	f.check("doesnt_contain", containsValue(f.value, value), map[string]any{"value": value})
+	f.check("doesnt_contain", slices.Contains(f.value, value), value)
 	return f
 }
 
 // Each 校验每个切片元素
 func (f *SliceField[T]) Each(rule, message string, valid func(T) bool, args ...any) *SliceField[T] {
 	for index, value := range f.value {
-		if valid(value) {
+		if valid != nil && valid(value) {
 			continue
 		}
-		path := fmt.Sprintf("%s[%d]", f.path, index)
+		path := f.path + "[" + strconv.Itoa(index) + "]"
 		f.checkPath(path, rule, message, true, args...)
 	}
 	return f
@@ -262,10 +340,9 @@ func (f *MapField[K, V]) Max(n int) *MapField[K, V] {
 
 // Between 校验Map键值数范围
 func (f *MapField[K, V]) Between(min, max int) *MapField[K, V] {
-	f.check("between", len(f.value) < min || len(f.value) > max, map[string]any{
-		"min": min,
-		"max": max,
-	})
+	if len(f.value) < min || len(f.value) > max {
+		f.check("between", true, arg("min", min), arg("max", max))
+	}
 	return f
 }
 
@@ -284,36 +361,42 @@ func (f *MapField[K, V]) HasKeys(keys ...K) *MapField[K, V] {
 			break
 		}
 	}
-	f.check("has_keys", invalid, map[string]any{"keys": fmt.Sprint(keys)})
+	if invalid {
+		f.check("has_keys", true, arg("keys", joinMapKeys(keys)))
+	}
 	return f
 }
 
 // AllowedKeys 校验Map仅包含指定键
 func (f *MapField[K, V]) AllowedKeys(keys ...K) *MapField[K, V] {
-	allowed := make(map[K]struct{}, len(keys))
-	for _, key := range keys {
-		allowed[key] = struct{}{}
-	}
 	invalid := false
 	for key := range f.value {
-		if _, exists := allowed[key]; !exists {
+		allowed := slices.Contains(keys, key)
+		if !allowed {
 			invalid = true
 			break
 		}
 	}
-	f.check("allowed_keys", invalid, map[string]any{"keys": fmt.Sprint(keys)})
+	if invalid {
+		f.check("allowed_keys", true, arg("keys", joinMapKeys(keys)))
+	}
 	return f
 }
 
 // Each 校验每个Map键值
 func (f *MapField[K, V]) Each(rule, message string, valid func(K, V) bool, args ...any) *MapField[K, V] {
+	start := len(f.errs)
 	for key, value := range f.value {
-		if valid(key, value) {
+		if valid != nil && valid(key, value) {
 			continue
 		}
-		path := joinPath(f.path, fmt.Sprint(key))
-		f.checkPath(path, rule, message, true, args...)
+		keyText := formatMapKey(key)
+		encodedKey := encodeMapKey(keyText)
+		path := joinPath(f.path, encodedKey)
+		display := displayFieldWithFallback(f.translator, path, displayMapKeyText(keyText))
+		f.checkPathDisplay(path, display, rule, message, args...)
 	}
+	sortErrorsByPath(f.errs[start:])
 	return f
 }
 

@@ -1,8 +1,7 @@
-// Package validatex 提供泛型字段校验,场景校验,翻译消息和通用错误响应
+// Package validatex 提供带本地化错误路径的泛型校验。
 package validatex
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -12,10 +11,15 @@ type Messages map[string]string
 // Translates 字段翻译表
 type Translates map[string]string
 
-// Translator 校验翻译器
+// Translator 校验翻译器 校验期间Messages和Translates应视为只读
+// 需要通配符预编译或并发只读快照时使用Compile
 type Translator struct {
 	Messages   Messages
 	Translates Translates
+
+	compiled           bool
+	wildcardMessages   []compiledMessagePattern
+	wildcardTranslates []compiledTranslatePattern
 }
 
 // FieldError 单条字段错误
@@ -26,28 +30,62 @@ type FieldError struct {
 	template string
 	arg      any
 	args     []any
-	argCount int
+	source   messageSource
+	hasArg   bool
 }
+
+type messageSource uint8
+
+const (
+	_ messageSource = iota // zero value marks already resolved messages
+	sourceRule
+	sourceTemplate
+)
 
 // Errors 字段错误集合
 type Errors []FieldError
 
 // Error 返回所有错误的文本
 func (e Errors) Error() string {
-	items := make([]string, 0, len(e))
-	for _, item := range e {
-		items = append(items, fmt.Sprintf("[%s: %s]", item.Path, item.Msg))
+	if len(e) == 0 {
+		return ""
 	}
-	return strings.Join(items, " ")
+
+	size := len(e)*5 - 1
+	for _, item := range e {
+		size += len(item.Path) + len(item.text())
+	}
+
+	var builder strings.Builder
+	builder.Grow(size)
+	for index, item := range e {
+		if index > 0 {
+			builder.WriteByte(' ')
+		}
+		builder.WriteByte('[')
+		builder.WriteString(item.Path)
+		builder.WriteString(": ")
+		builder.WriteString(item.text())
+		builder.WriteByte(']')
+	}
+	return builder.String()
 }
 
 // ToMap 按字段路径聚合错误消息
 func (e Errors) ToMap() map[string][]string {
 	result := make(map[string][]string, len(e))
 	for _, item := range e {
-		result[item.Path] = append(result[item.Path], item.Msg)
+		result[item.Path] = append(result[item.Path], item.text())
 	}
 	return result
+}
+
+// text 返回错误文本,缺失消息时回退到规则名
+func (e FieldError) text() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return e.Rule
 }
 
 // Validatable 定义普通校验接口
@@ -78,37 +116,28 @@ func NewTranslator() *Translator {
 	}
 }
 
-// Check 聚合多组字段错误
+// Check 聚合多组字段错误 仅一组非空时直接返回该切片,调用方应视为只读
 func Check(fields ...Errors) Errors {
 	total := 0
-	var only Errors
+	nonEmpty := 0
+	var last Errors
 	for _, field := range fields {
 		if len(field) == 0 {
 			continue
 		}
 		total += len(field)
-		only = field
+		nonEmpty++
+		last = field
 	}
 	if total == 0 {
 		return nil
 	}
-	if total == len(only) {
-		return only
+	if nonEmpty == 1 {
+		return last
 	}
 	all := make(Errors, 0, total)
 	for _, field := range fields {
 		all = append(all, field...)
 	}
 	return all
-}
-
-// arguments 返回错误参数
-func (e FieldError) arguments() []any {
-	if e.argCount == 0 {
-		return nil
-	}
-	if e.argCount == 1 {
-		return []any{e.arg}
-	}
-	return e.args
 }

@@ -53,11 +53,10 @@ validatex/
 ├── nested.go                # 嵌套结构体和Map校验
 └── tests/
     ├── benchmark_test.go           # 无第三方依赖的性能基准
-    ├── conditional_test.go         # 条件和可空校验测试
+    ├── internal_test.go            # 模糊、分配、键及格式化测试
     ├── request_response_test.go    # 请求及响应测试
-    ├── rules_test.go               # 内置规则测试
-    ├── validate_test.go            # 核心校验及翻译测试
-    └── wildcard_test.go            # 嵌套通配符路径测试
+    ├── rules_test.go               # 内置、条件及自定义规则测试
+    └── validate_test.go            # 核心、嵌套、通配符及翻译测试
 ```
 
 ## 快速开始
@@ -99,7 +98,7 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 核心包不依赖 Gin，可以直接在 `net/http`、gRPC、命令行或其他 Go 代码中使用：
 
 ```go
-errs := validatex.ValidateRequest(&request, "create")
+errs := validatex.ValidateRequest(&request)
 if len(errs) > 0 {
 	response := validatex.NewValidationErrorResponse(errs, "参数校验失败")
 	w.WriteHeader(response.Code)
@@ -112,7 +111,7 @@ if len(errs) > 0 {
 
 ```go
 translator := validatex.NewRequestTranslator(&request)
-errs := validatex.ValidateRequestWithTranslator(&request, "create", translator)
+errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 ## 内置规则
@@ -191,7 +190,7 @@ validatex.Int(translator, "age", value).Min(18).Max(60).Errors()
 | `MultipleOf` | 为指定值的倍数 |
 | `Digits` / `DigitsBetween` | 十进制位数或位数范围 |
 | `Positive` / `Negative` | 大于零或小于零 |
-| `RequiredIf` / `RequiredUnless` | 条件必填，零值视为空 |
+| `Required` / `RequiredIf` / `RequiredUnless` | 必填和条件必填，零值视为空 |
 | `Prohibited` / `ProhibitedIf` / `ProhibitedUnless` | 禁止有值及条件禁止 |
 | `Same` / `Different` | 与目标值相同或不同 |
 
@@ -205,7 +204,7 @@ validatex.Float(translator, "price", value).
 	Errors()
 ```
 
-`Float` 支持 `float32`、`float64`，提供 `Finite`、`Min`、`Max`、`Between`、`Size`、`Gt`、`Gte`、`Lt`、`Lte`、`In`、`NotIn`、`MultipleOf`、`Positive`、`Negative`、`Same`、`Different`、条件必填和条件禁止规则。
+`Float` 支持 `float32`、`float64`，提供 `Required`、`Finite`、`Min`、`Max`、`Between`、`Size`、`Gt`、`Gte`、`Lt`、`Lte`、`In`、`NotIn`、`MultipleOf`、`Positive`、`Negative`、`Same`、`Different`、条件必填和条件禁止规则。
 
 ### 布尔值
 
@@ -252,6 +251,22 @@ validatex.Map(translator, "data", values).
 ```
 
 提供 `Required`、`RequiredIf`、`RequiredUnless`、`Prohibited`、`ProhibitedIf`、`ProhibitedUnless`、`Min`、`Max`、`Between`、`Size`、`HasKeys`、`AllowedKeys`、`Each` 和自定义 `Rule`。
+
+Map key 支持任意 Go `comparable` 类型，包括整数、命名标量类型、结构体和 `[3]int` 这类定长数组。只有产生错误路径时才会格式化 key，校验通过的热路径不承担这部分开销。
+
+```go
+values := map[[3]int]string{
+	{1, 23, 4}: "",
+}
+
+errs := validatex.Map(translator, "data", values).Each(
+	"required",
+	"",
+	func(_ [3]int, value string) bool {
+		return value != ""
+	},
+).Errors()
+```
 
 `Each` 的错误路径使用Map键名：
 
@@ -358,9 +373,22 @@ errs := validatex.Int(translator, "age", value).
 1. `字段路径.规则名`，例如 `username.required`。
 2. 通配符路径规则，例如 `users.*.name.required`。
 3. `规则名`，例如 `required`。
-4. 未配置时使用默认文本 `字段路径 is 规则名`。
+4. 未配置时优先使用字段显示名生成 `字段显示名 is 规则名`；没有显示名时回退到字段路径。
 
 消息支持 `{field}`、`{path}`、`{rule}`、`{0}`、`{1}` 等占位符，也支持 `map[string]any` 中的命名占位符。
+
+### 编译翻译表
+
+通配符规则较多时，可以在启动阶段编译一次：
+
+```go
+translator := validatex.NewRequestTranslator(&request).Compile()
+errs := validatex.ValidateRequestWithTranslator(&request, translator)
+```
+
+`Compile` 返回包含预解析通配符索引和翻译表副本的快照。编译后的翻译器及其 Map 应视为只读；只要不修改，就可以安全地并发读取。编译后修改原始 Map 不会影响该快照。
+
+`Check` 在只有一组非空错误时会直接返回该切片。返回的 `Errors` 以及原始校验结果切片都应视为只读。
 
 ## 条件与可空
 
@@ -412,6 +440,18 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 
 嵌套错误路径会自动拼接为 `address.province`、`items[0].province`、`groups.admin.province`。
 
+可空嵌套指针使用 `StructPointer`、`SliceStructPointer` 和 `MapStructPointer`。这些函数通过泛型指针约束识别 nil，不依赖反射：
+
+```go
+validatex.StructPointer(translator, "profile", request.Profile)
+validatex.SliceStructPointer(translator, "items", request.Items)
+validatex.MapStructPointer(translator, "groups", request.Groups)
+```
+
+Map key 在安全时保持原样；路径保留字符 `.`、`[`、`]`、`%`、`*` 会进行百分号编码（`%2E`、`%5B`、`%5D`、`%25`、`%2A`），空 key 编码为 `%empty`。非标量 key 使用 Go 类型表示，避免不同类型或值生成相同路径；例如 `[3]int{1, 23, 4}` 会生成 `data.%5B3%5Dint{1, 23, 4}`。翻译配置使用编码后的路径，`{field}` 仍展示可读的 key。
+
+值元素使用 `Struct`、`SliceStruct`、`MapStruct`；指针元素使用 `StructPointer`、`SliceStructPointer`、`MapStructPointer`。指针版本会显式跳过 nil。
+
 ### 通配符路径
 
 结构体切片、结构体Map和Map逐项校验支持通配符翻译：
@@ -437,7 +477,7 @@ translator.Translates = validatex.Translates{
 
 ## 场景校验
 
-实现 `ValidateWithScene` 后，`Bind` 会优先调用对应场景。
+实现 `ValidateWithScene` 后，使用 `ValidateSceneRequest` 或 `ValidateSceneRequestWithTranslator` 调用对应场景。
 
 ```go
 func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {
@@ -451,17 +491,19 @@ func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validate
 			validatex.Int(translator, "id", r.ID).Min(1).Errors(),
 		)
 	default:
-		return r.Validate(translator)
+		return nil
 	}
 }
 ```
+
+`ValidateRequest` 和 `ValidateRequestWithTranslator` 用于实现 `Validatable` 的请求；实现 `SceneValidatable` 的请求使用 `ValidateSceneRequest` 或 `ValidateSceneRequestWithTranslator`。
 
 ## 框架集成
 
 框架绑定只需要组合 `NewRequestTranslator`、`ValidateRequestWithTranslator` 和通用响应：
 
 ```go
-func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, scene string) bool {
+func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P) bool {
 	translator := validatex.NewRequestTranslator(request)
 	if err := c.ShouldBindJSON(request); err != nil {
 		response := validatex.NewBindErrorResponse(err.Error(), "参数格式错误")
@@ -469,7 +511,7 @@ func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, s
 		return false
 	}
 
-	errs := validatex.ValidateRequestWithTranslator(request, scene, translator)
+	errs := validatex.ValidateRequestWithTranslator(request, translator)
 	if len(errs) > 0 {
 		response := validatex.NewValidationErrorResponse(errs, "参数校验失败")
 		c.JSON(response.Code, response)
@@ -517,16 +559,21 @@ func (ctl *UserController) Create(c *gin.Context) {
 go test -run '^$' -bench . -benchmem ./tests
 ```
 
-2026-10-23 在 Windows、`i5-10400` 环境的三次基准中位数近似结果：
+2026-10-26 在 Windows、`i5-10400` 环境的三次基准中位数近似结果：
 
 | 场景 | 耗时 | 内存 | 分配 |
 | --- | ---: | ---: | ---: |
-| 有效输入热路径 | 464 ns/op | 0 B/op | 0 |
-| 有效输入完整入口 | 460 ns/op | 0 B/op | 0 |
-| 无效输入热路径 | 620 ns/op | 488 B/op | 5 |
-| 无效输入完整入口 | 630 ns/op | 488 B/op | 5 |
+| 有效输入热路径 | 74 ns/op | 0 B/op | 0 |
+| 有效输入完整入口 | 78 ns/op | 0 B/op | 0 |
+| 无效输入热路径 | 448 ns/op | 480 B/op | 5 |
+| 无效输入完整入口 | 404 ns/op | 480 B/op | 5 |
+| 有效参数化规则 | 27 ns/op | 0 B/op | 0 |
+| 无效参数化规则 | 258 ns/op | 224 B/op | 5 |
+| 通配符查询，动态，128 条规则 | 26.7 µs/op | 12.5 KB/op | 261 |
+| 通配符查询，编译后，128 条规则 | 6.1 µs/op | 256 B/op | 5 |
+| 嵌套错误，128 条错误 | 78 µs/op | 71.5 KB/op | 771 |
 
-基准使用两个字符串字段。热路径使用预建翻译器，完整入口在没有翻译提供者时直接传入 `nil` 翻译器。结果不代表大型嵌套结构、国际化、数据库规则或所有输入场景。基准不引入第三方依赖。
+基准覆盖两个字符串字段、参数化字符串和整数规则，以及通配符规则较多的翻译查询。热路径使用预建翻译器，完整入口在没有翻译提供者时直接传入 `nil` 翻译器。结果不代表大型嵌套结构、国际化、数据库规则或所有输入场景。基准不引入第三方依赖。
 
 ## 测试
 

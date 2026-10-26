@@ -52,11 +52,10 @@ validatex/
 ├── nested.go                # Nested struct and map validation
 └── tests/
     ├── benchmark_test.go           # Self-contained performance benchmarks
-    ├── conditional_test.go         # Conditional and nullable tests
+    ├── internal_test.go            # Fuzz, allocation, key, and formatting tests
     ├── request_response_test.go    # Request and response tests
-    ├── rules_test.go               # Built-in validation rule tests
-    ├── validate_test.go            # Core validation and translation tests
-    └── wildcard_test.go            # Nested wildcard path tests
+    ├── rules_test.go               # Built-in, conditional, and custom rules
+    └── validate_test.go            # Core, nested, wildcard, and translation tests
 ```
 
 ## Quick Start
@@ -98,7 +97,7 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 The core package can be used from `net/http`, gRPC, CLI tools, jobs, or any other Go code:
 
 ```go
-errs := validatex.ValidateRequest(&request, "create")
+errs := validatex.ValidateRequest(&request)
 if len(errs) > 0 {
 	response := validatex.NewValidationErrorResponse(errs, "Validation failed")
 	w.WriteHeader(response.Code)
@@ -111,7 +110,7 @@ Reuse an existing translator when necessary:
 
 ```go
 translator := validatex.NewRequestTranslator(&request)
-errs := validatex.ValidateRequestWithTranslator(&request, "create", translator)
+errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 ## Built-In Rules
@@ -160,7 +159,7 @@ validatex.Int(translator, "age", value).Min(18).Max(60).Errors()
 
 `Int` supports `int`, `int32`, `int64`, unsigned integer types, and named types based on those underlying types.
 
-Available rules include `Min`, `Max`, `Between`, `Size`, `Gt`, `Gte`, `Lt`, `Lte`, `In`, `NotIn`, `MultipleOf`, `Digits`, `DigitsBetween`, `Positive`, `Negative`, `RequiredIf`, `RequiredUnless`, `ProhibitedIf`, `ProhibitedUnless`, `Same`, and `Different`.
+Available rules include `Required`, `Min`, `Max`, `Between`, `Size`, `Gt`, `Gte`, `Lt`, `Lte`, `In`, `NotIn`, `MultipleOf`, `Digits`, `DigitsBetween`, `Positive`, `Negative`, `RequiredIf`, `RequiredUnless`, `ProhibitedIf`, `ProhibitedUnless`, `Same`, and `Different`.
 
 ### Floats
 
@@ -172,7 +171,7 @@ validatex.Float(translator, "price", value).
 	Errors()
 ```
 
-`Float` supports `float32` and `float64`, with range, comparison, multiple, sign, set, conditional, and custom rules.
+`Float` supports `float32` and `float64`, with required, range, comparison, multiple, sign, set, conditional, and custom rules.
 
 ### Booleans
 
@@ -217,6 +216,22 @@ validatex.Map(translator, "data", values).
 ```
 
 Map rules include `Required`, `Min`, `Max`, `Between`, `Size`, `HasKeys`, `AllowedKeys`, `Each`, and custom `Rule`.
+
+Map keys support any Go `comparable` type, including integers, named scalar types, structs, and fixed-size arrays such as `[3]int`. Keys are formatted only when an error path is needed, so valid input does not pay that cost.
+
+```go
+values := map[[3]int]string{
+	{1, 23, 4}: "",
+}
+
+errs := validatex.Map(translator, "data", values).Each(
+	"required",
+	"",
+	func(_ [3]int, value string) bool {
+		return value != ""
+	},
+).Errors()
+```
 
 ## Custom Rules
 
@@ -279,7 +294,20 @@ Supported placeholders include:
 1. Exact field rule: `username.required`.
 2. Wildcard field rule: `users.*.name.required`.
 3. Global rule: `required`.
-4. Fallback: `path is rule`.
+4. Fallback: translated field display plus `is rule`; if no display is available, the field path is used.
+
+### Compiled Translation Tables
+
+Wildcard-heavy translation tables can be compiled once at startup:
+
+```go
+translator := validatex.NewRequestTranslator(&request).Compile()
+errs := validatex.ValidateRequestWithTranslator(&request, translator)
+```
+
+`Compile` returns a snapshot with pre-parsed wildcard patterns and copied translation maps. Treat the compiled translator and its maps as read-only; it is safe for concurrent validation reads as long as they are not modified. Changes to the original maps after compilation do not affect the snapshot.
+
+`Check` may return one of its input slices directly when it is the only non-empty group. Treat returned `Errors` and the original validation result slices as read-only.
 
 ## Conditions and Nullable Values
 
@@ -331,6 +359,18 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 
 Error paths use concrete values, such as `address.province`, `items[0].province`, and `groups.admin.province`.
 
+For optional nested pointers, use `StructPointer`, `SliceStructPointer`, and `MapStructPointer`. These functions use generic pointer constraints, so nil pointers are skipped without reflection:
+
+```go
+validatex.StructPointer(translator, "profile", request.Profile)
+validatex.SliceStructPointer(translator, "items", request.Items)
+validatex.MapStructPointer(translator, "groups", request.Groups)
+```
+
+Map keys keep their original form when safe. The reserved characters `.`, `[`, `]`, `%`, and `*` are percent-encoded in error paths (`%2E`, `%5B`, `%5D`, `%25`, `%2A`), and an empty key becomes `%empty`. Non-scalar keys use their Go representation so distinct types and values do not collapse into the same path; for example, `[3]int{1, 23, 4}` produces `data.%5B3%5Dint{1, 23, 4}`. Translation keys use the encoded path, while `{field}` still renders the readable key.
+
+Use `Struct`, `SliceStruct`, and `MapStruct` for value elements, and `StructPointer`, `SliceStructPointer`, and `MapStructPointer` for pointer elements. The pointer variants explicitly skip nil.
+
 ### Wildcard Paths
 
 Use wildcard message keys for repeated structures:
@@ -355,7 +395,7 @@ translator.Translates = validatex.Translates{
 
 ## Scene Validation
 
-Implement `ValidateWithScene` to select rules by operation:
+Implement `ValidateWithScene` to select rules by operation, then call `ValidateSceneRequest` or `ValidateSceneRequestWithTranslator`:
 
 ```go
 func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {
@@ -369,17 +409,19 @@ func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validate
 			validatex.Int(translator, "id", r.ID).Min(1).Errors(),
 		)
 	default:
-		return r.Validate(translator)
+		return nil
 	}
 }
 ```
+
+`ValidateRequest` and `ValidateRequestWithTranslator` are for requests implementing `Validatable`. Requests implementing `SceneValidatable` use `ValidateSceneRequest` or `ValidateSceneRequestWithTranslator`.
 
 ## Framework Integration
 
 The package intentionally contains no Web framework dependency. A Gin integration can be implemented in the consuming application:
 
 ```go
-func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, scene string) bool {
+func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P) bool {
 	translator := validatex.NewRequestTranslator(request)
 	if err := c.ShouldBindJSON(request); err != nil {
 		response := validatex.NewBindErrorResponse(err.Error(), "Invalid request")
@@ -387,7 +429,7 @@ func Bind[T any, P validatex.ValidatablePointer[T]](c *gin.Context, request P, s
 		return false
 	}
 
-	errs := validatex.ValidateRequestWithTranslator(request, scene, translator)
+	errs := validatex.ValidateRequestWithTranslator(request, translator)
 	if len(errs) > 0 {
 		response := validatex.NewValidationErrorResponse(errs, "Validation failed")
 		c.JSON(response.Code, response)
@@ -418,16 +460,21 @@ Benchmarks are in `tests/benchmark_test.go`.
 go test -run '^$' -bench . -benchmem ./tests
 ```
 
-Approximate median results on Windows with an Intel `i5-10400` on 2026-10-23:
+Approximate median results on Windows with an Intel `i5-10400` on 2026-10-26:
 
 | Scenario | Time | Memory | Allocations |
 | --- | ---: | ---: | ---: |
-| Valid hot path | 464 ns/op | 0 B/op | 0 |
-| Valid request entry | 460 ns/op | 0 B/op | 0 |
-| Invalid hot path | 620 ns/op | 488 B/op | 5 |
-| Invalid request entry | 630 ns/op | 488 B/op | 5 |
+| Valid hot path | 74 ns/op | 0 B/op | 0 |
+| Valid request entry | 78 ns/op | 0 B/op | 0 |
+| Invalid hot path | 448 ns/op | 480 B/op | 5 |
+| Invalid request entry | 404 ns/op | 480 B/op | 5 |
+| Valid parameterized rules | 27 ns/op | 0 B/op | 0 |
+| Invalid parameterized rules | 258 ns/op | 224 B/op | 5 |
+| Wildcard lookup, dynamic, 128 rules | 26.7 µs/op | 12.5 KB/op | 261 |
+| Wildcard lookup, compiled, 128 rules | 6.1 µs/op | 256 B/op | 5 |
+| Nested errors, 128 errors | 78 µs/op | 71.5 KB/op | 771 |
 
-The benchmark covers two string fields and does not represent large nested structures, localization, database rules, or every input shape. Benchmarks introduce no third-party dependencies.
+The benchmarks cover two string fields, parameterized string and integer rules, and wildcard-heavy translation lookup. They do not represent large nested structures, localization, database rules, or every input shape. Benchmarks introduce no third-party dependencies.
 
 ## Testing
 

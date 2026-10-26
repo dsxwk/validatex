@@ -6,12 +6,10 @@ import (
 )
 
 var (
-	//emailPattern 定义邮箱正则
-	emailPattern = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 	//uuidPattern 定义UUID正则
 	uuidPattern = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	//ulidPattern 定义ULID正则
-	ulidPattern = regexp.MustCompile(`(?i)^[0-9A-HJKMNP-TV-Z]{26}$`)
+	ulidPattern = regexp.MustCompile(`(?i)^[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
 	//hexColorPattern 定义十六进制颜色正则
 	hexColorPattern = regexp.MustCompile(`(?i)^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$`)
 )
