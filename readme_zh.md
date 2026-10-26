@@ -259,7 +259,7 @@ validatex.Map(translator, "data", values).
 
 提供 `Required`、`RequiredIf`、`RequiredUnless`、`Prohibited`、`ProhibitedIf`、`ProhibitedUnless`、`Min`、`Max`、`Between`、`Size`、`HasKeys`、`AllowedKeys`、`Each` 和自定义 `Rule`。
 
-Map key 支持 Go 可比较值类型，包括整数、命名标量类型、结构体和 `[3]int` 这类定长数组。直接使用指针、channel 或 unsafe pointer 作 key 时，Go 允许比较，但无法生成稳定且唯一的错误路径；路径会使用 `*string:unsupported`、`*string:nil`、`chan int:unsupported` 这类占位值。需要稳定路径时请使用值类型 key。只有产生错误路径时才会格式化 key，校验通过的热路径不承担这部分开销。
+Map key 支持 Go 可比较值类型，包括整数、命名标量类型、结构体和 `[3]int` 这类定长数组。指针、channel 或 unsafe pointer 作 key 时虽然可以比较，但默认格式可能包含进程相关地址。错误路径需要稳定且可移植时，请使用值类型 key。只有产生错误路径时才会格式化 key，校验通过的热路径不承担这部分开销。
 
 ```go
 values := map[[3]int]string{

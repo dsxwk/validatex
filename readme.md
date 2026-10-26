@@ -223,7 +223,7 @@ validatex.Map(translator, "data", values).
 
 Map rules include `Required`, `Min`, `Max`, `Between`, `Size`, `HasKeys`, `AllowedKeys`, `Each`, and custom `Rule`.
 
-Map keys support Go comparable value types, including integers, named scalar types, structs, and fixed-size arrays such as `[3]int`. Direct pointer, channel, and unsafe pointer keys are accepted by Go but cannot have stable unique paths; they use placeholders such as `*string:unsupported`, `*string:nil`, or `chan int:unsupported`. Use value keys when stable paths are required. Keys are formatted only when an error path is needed, so valid input does not pay that cost.
+Map keys support Go comparable value types, including integers, named scalar types, structs, and fixed-size arrays such as `[3]int`. Pointer, channel, and unsafe pointer keys are comparable, but their default formatting can contain process-specific addresses. Use value keys when error paths must remain stable and portable. Keys are formatted only when an error path is needed, so valid input does not pay that cost.
 
 ```go
 values := map[[3]int]string{

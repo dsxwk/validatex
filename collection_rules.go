@@ -2,7 +2,6 @@ package validatex
 
 import (
 	"fmt"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,16 +16,6 @@ type mapKey interface {
 
 // formatMapKey 生成Map键的稳定文本
 func formatMapKey[K mapKey](key K) string {
-	reflected := reflect.ValueOf(key)
-	if reflected.IsValid() {
-		switch reflected.Kind() {
-		case reflect.Chan, reflect.Pointer, reflect.UnsafePointer:
-			if reflected.IsNil() {
-				return fmt.Sprintf("%T:nil", key)
-			}
-			return fmt.Sprintf("%T:unsupported", key)
-		}
-	}
 	var zero K
 	if any(zero) == nil {
 		return fmt.Sprintf("%T:%#v", key, key)
