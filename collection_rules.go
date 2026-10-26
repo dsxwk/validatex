@@ -2,10 +2,13 @@ package validatex
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 )
+
+const allowedKeysLinearLimit = 8
 
 // mapKey 约束Map键为可比较类型
 type mapKey interface {
@@ -14,6 +17,16 @@ type mapKey interface {
 
 // formatMapKey 生成Map键的稳定文本
 func formatMapKey[K mapKey](key K) string {
+	reflected := reflect.ValueOf(key)
+	if reflected.IsValid() {
+		switch reflected.Kind() {
+		case reflect.Chan, reflect.Pointer, reflect.UnsafePointer:
+			if reflected.IsNil() {
+				return fmt.Sprintf("%T:nil", key)
+			}
+			return fmt.Sprintf("%T:unsupported", key)
+		}
+	}
 	var zero K
 	if any(zero) == nil {
 		return fmt.Sprintf("%T:%#v", key, key)
@@ -370,11 +383,23 @@ func (f *MapField[K, V]) HasKeys(keys ...K) *MapField[K, V] {
 // AllowedKeys 校验Map仅包含指定键
 func (f *MapField[K, V]) AllowedKeys(keys ...K) *MapField[K, V] {
 	invalid := false
-	for key := range f.value {
-		allowed := slices.Contains(keys, key)
-		if !allowed {
-			invalid = true
-			break
+	if len(keys) <= allowedKeysLinearLimit || len(f.value) <= allowedKeysLinearLimit {
+		for key := range f.value {
+			if !slices.Contains(keys, key) {
+				invalid = true
+				break
+			}
+		}
+	} else {
+		allowed := make(map[K]struct{}, len(keys))
+		for _, key := range keys {
+			allowed[key] = struct{}{}
+		}
+		for key := range f.value {
+			if _, exists := allowed[key]; !exists {
+				invalid = true
+				break
+			}
 		}
 	}
 	if invalid {

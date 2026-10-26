@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/dsxwk/validatex"
@@ -191,6 +192,9 @@ func TestNestedPaths(t *testing.T) {
 	}
 	if errs[1].Path != "items[1].province" {
 		t.Fatalf("unexpected slice path: %s", errs[1].Path)
+	}
+	if indexes := errs[1].Indexes(); !slices.Equal(indexes, []int{1}) {
+		t.Fatalf("unexpected slice path indexes: %v", indexes)
 	}
 	if errs[1].Msg != "省份必填" {
 		t.Fatalf("unexpected nested message: %s", errs[1].Msg)
@@ -438,6 +442,31 @@ func TestErrorsError(t *testing.T) {
 	}
 	if message := ruleOnly.ToMap()["age"][0]; message != "required" {
 		t.Fatalf("expected rule fallback in error map, got %q", message)
+	}
+}
+
+// TestFieldErrorIndexes 验证错误路径中的切片下标提取
+func TestFieldErrorIndexes(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want []int
+	}{
+		{name: "no index", path: "name"},
+		{name: "single index", path: "users[2].email", want: []int{2}},
+		{name: "nested indexes", path: "users[2].items[4].email", want: []int{2, 4}},
+		{name: "adjacent indexes", path: "matrix[7][9]", want: []int{7, 9}},
+		{name: "invalid index", path: "users[first].email"},
+		{name: "unclosed index", path: "users[2.email"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := (validatex.FieldError{Path: test.path}).Indexes()
+			if !slices.Equal(got, test.want) {
+				t.Fatalf("Indexes() = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 

@@ -113,6 +113,8 @@ translator := validatex.NewRequestTranslator(&request)
 errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
+`NewRequestTranslator` returns a compiled snapshot of the request translation maps. Reuse that translator when translating many validation errors. `ValidateRequest` creates a compiled translator for each call when the request implements translation providers.
+
 ## Built-In Rules
 
 ### Strings
@@ -150,6 +152,8 @@ validatex.Str(translator, "username", value).
 | `Before`, `BeforeOrEqual`, `After`, `AfterOrEqual` | Date comparison |
 
 Format rules skip empty strings by default. Combine them with `Required` when the value must be present.
+`Between` rejects every non-empty string when `min > max`.
+`Timezone` calls `time.LoadLocation` for every non-empty value, which may read the system timezone database. For high-volume validation, use a preloaded timezone allowlist through a custom `Rule`.
 
 ### Integers
 
@@ -160,6 +164,7 @@ validatex.Int(translator, "age", value).Min(18).Max(60).Errors()
 `Int` supports `int`, `int32`, `int64`, unsigned integer types, and named types based on those underlying types.
 
 Available rules include `Required`, `Min`, `Max`, `Between`, `Size`, `Gt`, `Gte`, `Lt`, `Lte`, `In`, `NotIn`, `MultipleOf`, `Digits`, `DigitsBetween`, `Positive`, `Negative`, `RequiredIf`, `RequiredUnless`, `ProhibitedIf`, `ProhibitedUnless`, `Same`, and `Different`.
+`Required`, `RequiredIf`, and `RequiredUnless` treat integer zero as an empty value.
 
 ### Floats
 
@@ -192,6 +197,7 @@ validatex.Slice(translator, "ids", values).
 ```
 
 Slice rules include `Required`, `Min`, `Max`, `Between`, `Size`, `Distinct`, `Contains`, `DoesntContain`, `Each`, and custom `Rule`.
+`Slice` requires comparable elements because `Distinct` and `Contains` compare values. For struct slices that implement `Validatable`, use `SliceStruct` or `SliceStructPointer` to validate every element.
 
 `Each` reports an indexed error path:
 
@@ -217,7 +223,7 @@ validatex.Map(translator, "data", values).
 
 Map rules include `Required`, `Min`, `Max`, `Between`, `Size`, `HasKeys`, `AllowedKeys`, `Each`, and custom `Rule`.
 
-Map keys support any Go `comparable` type, including integers, named scalar types, structs, and fixed-size arrays such as `[3]int`. Keys are formatted only when an error path is needed, so valid input does not pay that cost.
+Map keys support Go comparable value types, including integers, named scalar types, structs, and fixed-size arrays such as `[3]int`. Direct pointer, channel, and unsafe pointer keys are accepted by Go but cannot have stable unique paths; they use placeholders such as `*string:unsupported`, `*string:nil`, or `chan int:unsupported`. Use value keys when stable paths are required. Keys are formatted only when an error path is needed, so valid input does not pay that cost.
 
 ```go
 values := map[[3]int]string{
@@ -298,16 +304,22 @@ Supported placeholders include:
 
 ### Compiled Translation Tables
 
-Wildcard-heavy translation tables can be compiled once at startup:
+`NewRequestTranslator` already returns a compiled snapshot. Compile a manually configured translator once before reusing it:
 
 ```go
-translator := validatex.NewRequestTranslator(&request).Compile()
+translator := validatex.NewTranslator()
+translator.Messages = validatex.Messages{
+	"users.*.name.required": "{field} is required",
+}
+translator = translator.Compile()
 errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 `Compile` returns a snapshot with pre-parsed wildcard patterns and copied translation maps. Treat the compiled translator and its maps as read-only; it is safe for concurrent validation reads as long as they are not modified. Changes to the original maps after compilation do not affect the snapshot.
 
 `Check` may return one of its input slices directly when it is the only non-empty group. Treat returned `Errors` and the original validation result slices as read-only.
+
+`FieldError.Indexes()` extracts every zero-based slice index from `Path`. For example, `users[2].items[4].email` returns `[2, 4]`; paths without a slice index return `nil`.
 
 ## Conditions and Nullable Values
 
@@ -396,6 +408,13 @@ translator.Translates = validatex.Translates{
 ## Scene Validation
 
 Implement `ValidateWithScene` to select rules by operation, then call `ValidateSceneRequest` or `ValidateSceneRequestWithTranslator`:
+
+```go
+errs := validatex.ValidateSceneRequest(&request, "create")
+errs = validatex.ValidateSceneRequestWithTranslator(&request, "update", translator)
+```
+
+The scene implementation selects rules by operation:
 
 ```go
 func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"slices"
+	"strconv"
 )
 
 // FloatValue 定义内置浮点类型约束
@@ -337,8 +339,9 @@ func isFloatMultipleOf[T FloatValue](value, divisor T) bool {
 	if !isFinite(value) || !isFinite(divisor) {
 		return false
 	}
-	valueRat, valueOK := new(big.Rat).SetString(fmt.Sprint(value))
-	divisorRat, divisorOK := new(big.Rat).SetString(fmt.Sprint(divisor))
+	bitSize := reflect.TypeOf(value).Bits()
+	valueRat, valueOK := new(big.Rat).SetString(strconv.FormatFloat(float64(value), 'g', -1, bitSize))
+	divisorRat, divisorOK := new(big.Rat).SetString(strconv.FormatFloat(float64(divisor), 'g', -1, bitSize))
 	if !valueOK || !divisorOK || divisorRat.Sign() == 0 {
 		return false
 	}

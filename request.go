@@ -1,13 +1,12 @@
 package validatex
 
-// NewRequestTranslator 创建请求翻译器
+// NewRequestTranslator 创建已编译的请求翻译器快照
 func NewRequestTranslator[T any, P PointerTo[T]](request P) *Translator {
 	translator := NewTranslator()
-	if request == nil {
-		return translator
+	if request != nil {
+		applyRequestTranslations(request, translator)
 	}
-	applyRequestTranslations(request, translator)
-	return translator
+	return translator.Compile()
 }
 
 // PointerTo 约束具体指针类型,T为指针指向的值类型
@@ -61,7 +60,7 @@ func ValidateSceneRequestWithTranslator[T any, P SceneValidatablePointer[T]](req
 	return request.ValidateWithScene(scene, translator)
 }
 
-// requestTranslator 创建只读请求翻译器
+// requestTranslator 创建已编译的只读请求翻译器
 func requestTranslator(request any) *Translator {
 	_, providesTranslates := request.(TranslatesProvider)
 	_, providesMessages := request.(MessagesProvider)
@@ -70,7 +69,7 @@ func requestTranslator(request any) *Translator {
 	}
 	translator := &Translator{}
 	applyRequestTranslations(request, translator)
-	return translator
+	return translator.Compile()
 }
 
 // applyRequestTranslations 应用请求翻译配置

@@ -95,6 +95,18 @@ func TestValidRulesDoNotAllocate(t *testing.T) {
 				return validatex.Str(translator, "accepted", " TRUE ").Accepted().Errors()
 			},
 		},
+		{
+			name: "lowercase",
+			errors: func() validatex.Errors {
+				return validatex.Str(translator, "value", "codex-123").Lowercase().Errors()
+			},
+		},
+		{
+			name: "uppercase",
+			errors: func() validatex.Errors {
+				return validatex.Str(translator, "value", "CODEX-123").Uppercase().Errors()
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -114,6 +126,8 @@ func TestValidRulesDoNotAllocate(t *testing.T) {
 
 // TestMapKeyFormatting 验证可比较Map键生成稳定路径
 func TestMapKeyFormatting(t *testing.T) {
+	pointer := new(string)
+	channel := make(chan int)
 	tests := []struct {
 		name string
 		got  string
@@ -126,6 +140,12 @@ func TestMapKeyFormatting(t *testing.T) {
 		{name: "complex", got: mapKeyPath(complex(1, 2)), want: "data.(1+2i)"},
 		{name: "array", got: mapKeyPath([3]int{1, 23, 4}), want: "data.%5B3%5Dint{1, 23, 4}"},
 		{name: "interface", got: mapKeyPath[any]("name"), want: `data.string:"name"`},
+		{name: "pointer", got: mapKeyPath(pointer), want: "data.%2Astring:unsupported"},
+		{name: "nil pointer", got: mapKeyPath((*string)(nil)), want: "data.%2Astring:nil"},
+		{name: "channel", got: mapKeyPath(channel), want: "data.chan int:unsupported"},
+		{name: "nil channel", got: mapKeyPath((chan int)(nil)), want: "data.chan int:nil"},
+		{name: "interface pointer", got: mapKeyPath[any](pointer), want: "data.%2Astring:unsupported"},
+		{name: "interface nil pointer", got: mapKeyPath[any]((*string)(nil)), want: "data.%2Astring:nil"},
 	}
 
 	for _, test := range tests {

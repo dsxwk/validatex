@@ -114,6 +114,8 @@ translator := validatex.NewRequestTranslator(&request)
 errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
+`NewRequestTranslator` 返回请求翻译表的已编译快照。需要批量翻译错误时应复用该翻译器；请求实现翻译接口时，`ValidateRequest` 会在每次调用中创建已编译翻译器。
+
 ## 内置规则
 
 ### 字符串
@@ -171,6 +173,8 @@ validatex.Str(translator, "username", value).
 | `After` / `AfterOrEqual` | 晚于或不早于目标日期 |
 
 字符串格式规则对空字符串默认跳过，需要必填时组合 `Required`。
+`Between` 在 `min > max` 时会拒绝所有非空字符串。
+`Timezone` 会对每个非空值调用 `time.LoadLocation`，可能读取系统时区数据库。高频校验建议通过自定义 `Rule` 使用预加载的时区白名单。
 
 ### 整数
 
@@ -193,6 +197,8 @@ validatex.Int(translator, "age", value).Min(18).Max(60).Errors()
 | `Required` / `RequiredIf` / `RequiredUnless` | 必填和条件必填，零值视为空 |
 | `Prohibited` / `ProhibitedIf` / `ProhibitedUnless` | 禁止有值及条件禁止 |
 | `Same` / `Different` | 与目标值相同或不同 |
+
+`Required`、`RequiredIf`、`RequiredUnless` 会把整数零值视为空。
 
 ### 浮点数
 
@@ -225,6 +231,7 @@ validatex.Slice(translator, "ids", values).
 ```
 
 提供 `Required`、`RequiredIf`、`RequiredUnless`、`Prohibited`、`ProhibitedIf`、`ProhibitedUnless`、`Min`、`Max`、`Between`、`Size`、`Distinct`、`Contains`、`DoesntContain`、`Each` 和自定义 `Rule`。
+`Slice` 要求元素可比较，因为 `Distinct` 和 `Contains` 会比较元素。实现 `Validatable` 的结构体切片应使用 `SliceStruct` 或 `SliceStructPointer` 逐项校验。
 
 `Each` 会为每个失败元素生成独立错误路径：
 
@@ -252,7 +259,7 @@ validatex.Map(translator, "data", values).
 
 提供 `Required`、`RequiredIf`、`RequiredUnless`、`Prohibited`、`ProhibitedIf`、`ProhibitedUnless`、`Min`、`Max`、`Between`、`Size`、`HasKeys`、`AllowedKeys`、`Each` 和自定义 `Rule`。
 
-Map key 支持任意 Go `comparable` 类型，包括整数、命名标量类型、结构体和 `[3]int` 这类定长数组。只有产生错误路径时才会格式化 key，校验通过的热路径不承担这部分开销。
+Map key 支持 Go 可比较值类型，包括整数、命名标量类型、结构体和 `[3]int` 这类定长数组。直接使用指针、channel 或 unsafe pointer 作 key 时，Go 允许比较，但无法生成稳定且唯一的错误路径；路径会使用 `*string:unsupported`、`*string:nil`、`chan int:unsupported` 这类占位值。需要稳定路径时请使用值类型 key。只有产生错误路径时才会格式化 key，校验通过的热路径不承担这部分开销。
 
 ```go
 values := map[[3]int]string{
@@ -379,16 +386,22 @@ errs := validatex.Int(translator, "age", value).
 
 ### 编译翻译表
 
-通配符规则较多时，可以在启动阶段编译一次：
+`NewRequestTranslator` 已返回编译快照。手动配置翻译器时，应在复用前编译一次：
 
 ```go
-translator := validatex.NewRequestTranslator(&request).Compile()
+translator := validatex.NewTranslator()
+translator.Messages = validatex.Messages{
+	"users.*.name.required": "{field}不能为空",
+}
+translator = translator.Compile()
 errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 `Compile` 返回包含预解析通配符索引和翻译表副本的快照。编译后的翻译器及其 Map 应视为只读；只要不修改，就可以安全地并发读取。编译后修改原始 Map 不会影响该快照。
 
 `Check` 在只有一组非空错误时会直接返回该切片。返回的 `Errors` 以及原始校验结果切片都应视为只读。
+
+`FieldError.Indexes()` 会提取 `Path` 中的全部零基切片下标。例如 `users[2].items[4].email` 返回 `[2, 4]`；不含切片下标的路径返回 `nil`。
 
 ## 条件与可空
 
@@ -478,6 +491,13 @@ translator.Translates = validatex.Translates{
 ## 场景校验
 
 实现 `ValidateWithScene` 后，使用 `ValidateSceneRequest` 或 `ValidateSceneRequestWithTranslator` 调用对应场景。
+
+```go
+errs := validatex.ValidateSceneRequest(&request, "create")
+errs = validatex.ValidateSceneRequestWithTranslator(&request, "update", translator)
+```
+
+场景实现按操作选择规则：
 
 ```go
 func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {

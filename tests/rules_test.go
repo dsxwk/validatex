@@ -27,7 +27,9 @@ func TestStringRules(t *testing.T) {
 		{"alpha_num", validatex.Str(translator, "value", "abc-1").AlphaNum().Errors()},
 		{"ascii", validatex.Str(translator, "value", "中文").ASCII().Errors()},
 		{"lowercase", validatex.Str(translator, "value", "Abc").Lowercase().Errors()},
+		{"lowercase_invalid_utf8", validatex.Str(translator, "value", string([]byte{'a', 0xff})).Lowercase().Errors()},
 		{"uppercase", validatex.Str(translator, "value", "Abc").Uppercase().Errors()},
+		{"uppercase_invalid_utf8", validatex.Str(translator, "value", string([]byte{'A', 0xff})).Uppercase().Errors()},
 		{"starts_with", validatex.Str(translator, "value", "abc").StartsWith("x", "y").Errors()},
 		{"doesnt_start_with", validatex.Str(translator, "value", "abc").DoesntStartWith("a").Errors()},
 		{"ends_with", validatex.Str(translator, "value", "abc").EndsWith("x", "y").Errors()},
@@ -217,6 +219,20 @@ func TestCollectionRules(t *testing.T) {
 	}
 	if errs := validatex.Map(translator, "data", data).HasKeys("name").Min(2).Max(2).Errors(); len(errs) != 0 {
 		t.Fatalf("expected map chain to pass, got %v", errs)
+	}
+
+	largeMap := make(map[int]int, 10)
+	largeKeys := make([]int, 0, 10)
+	for index := range 10 {
+		largeMap[index] = index
+		largeKeys = append(largeKeys, index)
+	}
+	if errs := validatex.Map(translator, "data", largeMap).AllowedKeys(largeKeys...).Errors(); len(errs) != 0 {
+		t.Fatalf("expected indexed allowed keys to pass, got %v", errs)
+	}
+	largeMap[10] = 10
+	if errs := validatex.Map(translator, "data", largeMap).AllowedKeys(largeKeys...).Errors(); len(errs) != 1 {
+		t.Fatalf("expected indexed allowed keys to fail, got %v", errs)
 	}
 
 	var emptySlice []int

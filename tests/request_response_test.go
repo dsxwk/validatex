@@ -73,6 +73,21 @@ func (*sceneOnlyRequest) ValidateWithScene(scene string, _ *validatex.Translator
 	return validatex.Errors{{Path: "scene", Msg: scene}}
 }
 
+type mutableTranslationRequest struct {
+	messages validatex.Messages
+}
+
+// Messages 返回可修改的消息配置
+func (r *mutableTranslationRequest) Messages() validatex.Messages {
+	return r.messages
+}
+
+// Validate 在翻译器创建后修改原始消息配置
+func (r *mutableTranslationRequest) Validate(translator *validatex.Translator) validatex.Errors {
+	r.messages["required"] = "changed"
+	return validatex.Str(translator, "name", "").Required().Errors()
+}
+
 // TestValidateRequestSkipsTypedNilPointer 验证类型化nil请求会被跳过
 func TestValidateRequestSkipsTypedNilPointer(t *testing.T) {
 	tests := []struct {
@@ -150,6 +165,25 @@ func TestNewRequestTranslatorLoadsRequestTranslations(t *testing.T) {
 	translator := validatex.NewRequestTranslator(&genericRequest{})
 	if translator.Translates["name"] != "名称" || translator.Messages["required"] != "{field}必填" {
 		t.Fatalf("unexpected request translations: %+v", translator)
+	}
+}
+
+// TestRequestTranslatorsUseCompiledSnapshots 验证请求翻译器使用编译快照
+func TestRequestTranslatorsUseCompiledSnapshots(t *testing.T) {
+	request := &mutableTranslationRequest{
+		messages: validatex.Messages{"required": "before"},
+	}
+	translator := validatex.NewRequestTranslator(request)
+	request.messages["required"] = "changed"
+	errs := validatex.ValidateRequestWithTranslator(request, translator)
+	if len(errs) != 1 || errs[0].Msg != "before" {
+		t.Fatalf("request translator should keep a compiled snapshot: %v", errs)
+	}
+
+	request.messages["required"] = "before"
+	errs = validatex.ValidateRequest(request)
+	if len(errs) != 1 || errs[0].Msg != "before" {
+		t.Fatalf("default request translator should use a compiled snapshot: %v", errs)
 	}
 }
 

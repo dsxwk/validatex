@@ -110,14 +110,29 @@ func (f *StringField) ASCII() *StringField {
 
 // Lowercase 校验字符串为小写
 func (f *StringField) Lowercase() *StringField {
-	f.check("lowercase", f.value != "" && f.value != strings.ToLower(f.value))
+	f.check("lowercase", hasCaseDifference(f.value, unicode.ToLower))
 	return f
 }
 
 // Uppercase 校验字符串为大写
 func (f *StringField) Uppercase() *StringField {
-	f.check("uppercase", f.value != "" && f.value != strings.ToUpper(f.value))
+	f.check("uppercase", hasCaseDifference(f.value, unicode.ToUpper))
 	return f
+}
+
+// hasCaseDifference 判断字符串是否包含大小写变化或非法UTF-8
+func hasCaseDifference(value string, convert func(rune) rune) bool {
+	for index := 0; index < len(value); {
+		character, size := utf8.DecodeRuneInString(value[index:])
+		if character == utf8.RuneError && size == 1 {
+			return true
+		}
+		if convert(character) != character {
+			return true
+		}
+		index += size
+	}
+	return false
 }
 
 // StartsWith 校验字符串以任一目标开头

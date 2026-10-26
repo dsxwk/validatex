@@ -2,6 +2,7 @@
 package validatex
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -86,6 +87,27 @@ func (e FieldError) text() string {
 		return e.Msg
 	}
 	return e.Rule
+}
+
+// Indexes 返回错误路径中的切片下标
+func (e FieldError) Indexes() []int {
+	var indexes []int
+	for index := 0; index < len(e.Path); index++ {
+		if e.Path[index] != '[' {
+			continue
+		}
+		offset := strings.IndexByte(e.Path[index+1:], ']')
+		if offset < 0 {
+			break
+		}
+		closing := index + 1 + offset
+		value, err := strconv.Atoi(e.Path[index+1 : closing])
+		if err == nil && value >= 0 {
+			indexes = append(indexes, value)
+		}
+		index = closing
+	}
+	return indexes
 }
 
 // Validatable 定义普通校验接口
