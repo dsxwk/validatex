@@ -6,6 +6,40 @@ import (
 	"strings"
 )
 
+// NestedOption 定义嵌套指针校验选项
+type NestedOption uint8
+
+const (
+	nestedRequired NestedOption = 1 << iota
+	nestedRequiredElements
+)
+
+// WithRequired 要求嵌套指针或容器必填
+func WithRequired() NestedOption {
+	return nestedRequired
+}
+
+// WithRequiredElements 要求切片或Map元素不能为nil
+func WithRequiredElements() NestedOption {
+	return nestedRequiredElements
+}
+
+// parseNestedOptions 解析嵌套指针校验选项
+func parseNestedOptions(options []NestedOption) (required, requiredElements bool) {
+	for _, option := range options {
+		required = required || option&nestedRequired != 0
+		requiredElements = requiredElements || option&nestedRequiredElements != 0
+	}
+	return required, requiredElements
+}
+
+// nestedRequiredErrors 创建嵌套字段必填错误
+func nestedRequiredErrors[V any](translator *Translator, path string, value V) Errors {
+	field := newBaseField(translator, path, value)
+	field.check("required", true)
+	return field.errs
+}
+
 // Struct 校验非nil的嵌套结构体值,指针请使用StructPointer
 func Struct[T Validatable](translator *Translator, path string, value T) Errors {
 	if any(value) == nil {
@@ -14,9 +48,13 @@ func Struct[T Validatable](translator *Translator, path string, value T) Errors 
 	return relocateErrors(translator, path, value.Validate(translator))
 }
 
-// StructPointer 校验嵌套结构体指针,nil指针会被跳过
-func StructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, value P) Errors {
+// StructPointer 校验嵌套结构体指针
+func StructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, value P, options ...NestedOption) Errors {
+	required, _ := parseNestedOptions(options)
 	if value == nil {
+		if required {
+			return nestedRequiredErrors(translator, path, value)
+		}
 		return nil
 	}
 	return relocateErrors(translator, path, validatePointer(translator, value))
@@ -42,11 +80,19 @@ func SliceStruct[T Validatable](translator *Translator, path string, values []T)
 	return errs
 }
 
-// SliceStructPointer 校验结构体指针切片,nil指针会被跳过
-func SliceStructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, values []P) Errors {
+// SliceStructPointer 校验结构体指针切片
+func SliceStructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, values []P, options ...NestedOption) Errors {
+	required, requiredElements := parseNestedOptions(options)
+	if required && len(values) == 0 {
+		return nestedRequiredErrors(translator, path, values)
+	}
 	var errs Errors
 	for index, value := range values {
 		if value == nil {
+			if requiredElements {
+				itemPath := path + "[" + strconv.Itoa(index) + "]"
+				errs = append(errs, nestedRequiredErrors(translator, itemPath, value)...)
+			}
 			continue
 		}
 		childErrors := validatePointer(translator, value)
@@ -84,11 +130,22 @@ func MapStruct[K comparable, T Validatable](translator *Translator, path string,
 	return errs
 }
 
-// MapStructPointer 校验Map中的结构体指针,nil指针会被跳过
-func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](translator *Translator, path string, values map[K]P) Errors {
+// MapStructPointer 校验Map中的结构体指针
+func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](translator *Translator, path string, values map[K]P, options ...NestedOption) Errors {
+	required, requiredElements := parseNestedOptions(options)
+	if required && len(values) == 0 {
+		return nestedRequiredErrors(translator, path, values)
+	}
 	var errs Errors
 	for key, value := range values {
 		if value == nil {
+			if requiredElements {
+				keyText := formatMapKey(key)
+				itemPath := joinMapPath(path, keyText)
+				field := newBaseField(translator, itemPath, value)
+				field.checkPathDisplay(itemPath, displayMapKeyText(keyText), "required", "")
+				errs = append(errs, field.errs...)
+			}
 			continue
 		}
 		childErrors := validatePointer(translator, value)

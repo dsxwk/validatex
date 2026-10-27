@@ -255,6 +255,47 @@ func TestNestedValidationSkipsTypedNilPointer(t *testing.T) {
 	}
 }
 
+// TestNestedPointerRequiredOptions 验证嵌套指针必填选项
+func TestNestedPointerRequiredOptions(t *testing.T) {
+	translator := validatex.NewTranslator()
+	var address *pointerAddress
+
+	errs := validatex.StructPointer(translator, "address", address, validatex.WithRequired())
+	if len(errs) != 1 || errs[0].Path != "address" || errs[0].Rule != "required" {
+		t.Fatalf("expected required struct pointer error, got %v", errs)
+	}
+
+	errs = validatex.SliceStructPointer(translator, "items", []*pointerAddress{}, validatex.WithRequired())
+	if len(errs) != 1 || errs[0].Path != "items" || errs[0].Rule != "required" {
+		t.Fatalf("expected required slice pointer error, got %v", errs)
+	}
+
+	errs = validatex.SliceStructPointer(
+		translator,
+		"items",
+		[]*pointerAddress{nil, {}},
+		validatex.WithRequiredElements(),
+	)
+	if len(errs) != 2 || errs[0].Path != "items[0]" || errs[0].Rule != "required" || errs[1].Path != "items[1].unexpected" {
+		t.Fatalf("expected required slice element errors, got %v", errs)
+	}
+
+	errs = validatex.MapStructPointer(translator, "groups", map[string]*pointerAddress{}, validatex.WithRequired())
+	if len(errs) != 1 || errs[0].Path != "groups" || errs[0].Rule != "required" {
+		t.Fatalf("expected required map pointer error, got %v", errs)
+	}
+
+	errs = validatex.MapStructPointer(
+		translator,
+		"groups",
+		map[string]*pointerAddress{"admin": nil, "ops": {}},
+		validatex.WithRequiredElements(),
+	)
+	if len(errs) != 2 || errs[0].Path != "groups.admin" || errs[0].Rule != "required" || errs[1].Path != "groups.ops.unexpected" {
+		t.Fatalf("expected required map element errors, got %v", errs)
+	}
+}
+
 // TestMapStructErrorsAreDeterministic 验证Map结构体错误顺序稳定
 func TestMapStructErrorsAreDeterministic(t *testing.T) {
 	translator := &validatex.Translator{

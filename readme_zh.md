@@ -453,7 +453,7 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 
 嵌套错误路径会自动拼接为 `address.province`、`items[0].province`、`groups.admin.province`。
 
-可空嵌套指针使用 `StructPointer`、`SliceStructPointer` 和 `MapStructPointer`。这些函数通过泛型指针约束识别 nil，不依赖反射：
+嵌套指针默认是可选字段，`StructPointer`、`SliceStructPointer` 和 `MapStructPointer` 会通过泛型指针约束跳过 nil，不依赖反射：
 
 ```go
 validatex.StructPointer(translator, "profile", request.Profile)
@@ -461,9 +461,22 @@ validatex.SliceStructPointer(translator, "items", request.Items)
 validatex.MapStructPointer(translator, "groups", request.Groups)
 ```
 
+需要指针或容器本身必传时使用 `WithRequired()`。必填指针为 nil 时只返回该路径的 `required` 错误，不再校验子字段。切片或 Map 的指针元素不能为 nil 时使用 `WithRequiredElements()`：
+
+```go
+validatex.StructPointer(translator, "profile", request.Profile, validatex.WithRequired())
+validatex.SliceStructPointer(
+	translator,
+	"items",
+	request.Items,
+	validatex.WithRequired(),
+	validatex.WithRequiredElements(),
+)
+```
+
 Map key 在安全时保持原样；路径保留字符 `.`、`[`、`]`、`%`、`*` 会进行百分号编码（`%2E`、`%5B`、`%5D`、`%25`、`%2A`），空 key 编码为 `%empty`。非标量 key 使用 Go 类型表示，避免不同类型或值生成相同路径；例如 `[3]int{1, 23, 4}` 会生成 `data.%5B3%5Dint{1, 23, 4}`。翻译配置使用编码后的路径，`{field}` 仍展示可读的 key。
 
-值元素使用 `Struct`、`SliceStruct`、`MapStruct`；指针元素使用 `StructPointer`、`SliceStructPointer`、`MapStructPointer`。指针版本会显式跳过 nil。
+值元素使用 `Struct`、`SliceStruct`、`MapStruct`；指针元素使用 `StructPointer`、`SliceStructPointer`、`MapStructPointer`。指针版本默认跳过 nil，父级必填和元素必填通过显式选项开启。
 
 ### 通配符路径
 

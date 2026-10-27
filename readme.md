@@ -371,7 +371,7 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 
 Error paths use concrete values, such as `address.province`, `items[0].province`, and `groups.admin.province`.
 
-For optional nested pointers, use `StructPointer`, `SliceStructPointer`, and `MapStructPointer`. These functions use generic pointer constraints, so nil pointers are skipped without reflection:
+Nested pointers are optional by default, so `StructPointer`, `SliceStructPointer`, and `MapStructPointer` skip nil values without reflection:
 
 ```go
 validatex.StructPointer(translator, "profile", request.Profile)
@@ -379,9 +379,22 @@ validatex.SliceStructPointer(translator, "items", request.Items)
 validatex.MapStructPointer(translator, "groups", request.Groups)
 ```
 
+Use `WithRequired()` when the pointer or container itself must be present. A nil required pointer returns only the `required` error at that path and does not validate child fields. Use `WithRequiredElements()` when slice or map pointer elements must not be nil:
+
+```go
+validatex.StructPointer(translator, "profile", request.Profile, validatex.WithRequired())
+validatex.SliceStructPointer(
+	translator,
+	"items",
+	request.Items,
+	validatex.WithRequired(),
+	validatex.WithRequiredElements(),
+)
+```
+
 Map keys keep their original form when safe. The reserved characters `.`, `[`, `]`, `%`, and `*` are percent-encoded in error paths (`%2E`, `%5B`, `%5D`, `%25`, `%2A`), and an empty key becomes `%empty`. Non-scalar keys use their Go representation so distinct types and values do not collapse into the same path; for example, `[3]int{1, 23, 4}` produces `data.%5B3%5Dint{1, 23, 4}`. Translation keys use the encoded path, while `{field}` still renders the readable key.
 
-Use `Struct`, `SliceStruct`, and `MapStruct` for value elements, and `StructPointer`, `SliceStructPointer`, and `MapStructPointer` for pointer elements. The pointer variants explicitly skip nil.
+Use `Struct`, `SliceStruct`, and `MapStruct` for value elements, and `StructPointer`, `SliceStructPointer`, and `MapStructPointer` for pointer elements. Pointer variants skip nil by default; required presence and required elements are explicit options.
 
 ### Wildcard Paths
 
