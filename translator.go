@@ -3,6 +3,7 @@ package validatex
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -430,13 +431,7 @@ func normalizePath(path string) string {
 
 // matchWildcardSegments 按路径段匹配通配符
 func matchWildcardSegments(pattern, actual []string) bool {
-	hasDeepWildcard := false
-	for _, segment := range pattern {
-		if segment == "**" {
-			hasDeepWildcard = true
-			break
-		}
-	}
+	hasDeepWildcard := slices.Contains(pattern, "**")
 
 	if !hasDeepWildcard {
 		if len(pattern) != len(actual) {
