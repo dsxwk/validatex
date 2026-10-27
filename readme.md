@@ -84,11 +84,11 @@ func (r *CreateUserRequest) Messages() validatex.Messages {
 	}
 }
 
-func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *CreateUserRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "username", r.Username).Required().Min(3).Errors(),
-		validatex.Str(translator, "email", r.Email).Required().Email().Errors(),
-		validatex.Int(translator, "age", r.Age).Min(18).Errors(),
+		fields.Str("username", r.Username).Required().Min(3).Errors(),
+		fields.Str("email", r.Email).Required().Email().Errors(),
+		fields.Int("age", r.Age).Min(18).Errors(),
 	)
 }
 ```
@@ -342,7 +342,7 @@ Use `When` for conditional validation:
 ```go
 errs := validatex.When(request.Status == "published", func() validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "content", request.Content).Required().Errors(),
+		fields.Str("content", request.Content).Required().Errors(),
 	)
 })
 ```
@@ -352,7 +352,7 @@ Use `Nullable` for pointers:
 ```go
 errs := validatex.Nullable(request.Email, func(value string) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "email", value).Required().Email().Errors(),
+		fields.Str("email", value).Required().Email().Errors(),
 	)
 })
 ```
@@ -361,24 +361,24 @@ Request validation entry points accept a request pointer. A `nil` pointer skips 
 
 ## Nested Validation
 
-Nested values implement `Validate(translator *validatex.Translator) validatex.Errors`.
+Nested values implement `Validate(fields validatex.Fields) validatex.Errors`.
 
 ```go
 type Address struct {
 	Province string `json:"province"`
 }
 
-func (a Address) Validate(translator *validatex.Translator) validatex.Errors {
+func (a Address) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "province", a.Province).Required().Errors(),
+		fields.Str("province", a.Province).Required().Errors(),
 	)
 }
 
-func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *CreateUserRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Struct(translator, "address", r.Address),
-		validatex.SliceStruct(translator, "items", r.Items),
-		validatex.MapStruct(translator, "groups", r.Groups),
+		fields.Struct("address", r.Address),
+		fields.SliceStruct("items", r.Items),
+		fields.MapStruct("groups", r.Groups),
 	)
 }
 ```
@@ -388,17 +388,16 @@ Error paths use concrete values, such as `address.province`, `items[0].province`
 Nested pointers are optional by default, so `StructPointer`, `SliceStructPointer`, and `MapStructPointer` skip nil values without reflection:
 
 ```go
-validatex.StructPointer(translator, "profile", request.Profile)
-validatex.SliceStructPointer(translator, "items", request.Items)
-validatex.MapStructPointer(translator, "groups", request.Groups)
+fields.StructPointer("profile", request.Profile)
+fields.SliceStructPointer("items", request.Items)
+fields.MapStructPointer("groups", request.Groups)
 ```
 
 Use `WithRequired()` when the pointer or container itself must be present. A nil required pointer returns only the `required` error at that path and does not validate child fields. Use `WithRequiredElements()` when slice or map pointer elements must not be nil:
 
 ```go
-validatex.StructPointer(translator, "profile", request.Profile, validatex.WithRequired())
-validatex.SliceStructPointer(
-	translator,
+fields.StructPointer("profile", request.Profile, validatex.WithRequired())
+fields.SliceStructPointer(
 	"items",
 	request.Items,
 	validatex.WithRequired(),
@@ -444,15 +443,15 @@ errs = validatex.ValidateSceneRequestWithTranslator(&request, "update", translat
 The scene implementation selects rules by operation:
 
 ```go
-func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {
+func (r *UpdateUserRequest) ValidateWithScene(scene string, fields validatex.Fields) validatex.Errors {
 	switch scene {
 	case "create":
 		return validatex.Check(
-			validatex.Str(translator, "username", r.Username).Required().Errors(),
+			fields.Str("username", r.Username).Required().Errors(),
 		)
 	case "update":
 		return validatex.Check(
-			validatex.Int(translator, "id", r.ID).Min(1).Errors(),
+			fields.Int("id", r.ID).Min(1).Errors(),
 		)
 	default:
 		return nil

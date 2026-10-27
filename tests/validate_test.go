@@ -12,9 +12,9 @@ type testAddress struct {
 }
 
 // Validate 为嵌套测试实现validatex.Validatable
-func (a testAddress) Validate(translator *validatex.Translator) validatex.Errors {
+func (a testAddress) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "province", a.Province).Required().Errors(),
+		fields.Str("province", a.Province).Required().Errors(),
 	)
 }
 
@@ -29,21 +29,21 @@ type testUser struct {
 type pointerAddress struct{}
 
 // Validate 为指针集成测试返回固定错误
-func (*pointerAddress) Validate(*validatex.Translator) validatex.Errors {
+func (*pointerAddress) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "unexpected"}}
 }
 
 type customNested struct{}
 
 // Validate 返回固定自定义消息
-func (customNested) Validate(*validatex.Translator) validatex.Errors {
+func (customNested) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "code", Rule: "custom", Msg: "自定义消息"}}
 }
 
 type translatedNested struct{}
 
 // Validate 为翻译测试返回仅包含规则名的错误
-func (translatedNested) Validate(*validatex.Translator) validatex.Errors {
+func (translatedNested) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "code", Rule: "required"}}
 }
 
@@ -57,20 +57,20 @@ func (collidingMapKey) String() string {
 type mapKeyValue string
 
 // Validate 使用空路径校验当前值
-func (value mapKeyValue) Validate(translator *validatex.Translator) validatex.Errors {
-	return validatex.Str(translator, "", string(value)).Required().Errors()
+func (value mapKeyValue) Validate(fields validatex.Fields) validatex.Errors {
+	return fields.Str("", string(value)).Required().Errors()
 }
 
 type namedIntKey int
 
 // Validate 为嵌套测试请求实现validatex.Validatable
-func (u testUser) Validate(translator *validatex.Translator) validatex.Errors {
+func (u testUser) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "username", u.Username).Required().Min(3).Errors(),
-		validatex.Str(translator, "email", u.Email).Required().Email().Errors(),
-		validatex.Int(translator, "age", u.Age).Min(18).Errors(),
-		validatex.Struct(translator, "address", u.Address),
-		validatex.SliceStruct(translator, "items", u.Items),
+		fields.Str("username", u.Username).Required().Min(3).Errors(),
+		fields.Str("email", u.Email).Required().Email().Errors(),
+		fields.Int("age", u.Age).Min(18).Errors(),
+		fields.Struct("address", u.Address),
+		fields.SliceStruct("items", u.Items),
 	)
 }
 
@@ -183,7 +183,7 @@ func TestNestedPaths(t *testing.T) {
 		Items:    []testAddress{{Province: "浙江"}, {}},
 	}
 
-	errs := user.Validate(translator)
+	errs := user.Validate(validatex.NewFields(translator))
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 errors, got %d", len(errs))
 	}
@@ -206,7 +206,7 @@ func TestNestedValidationPreservesCustomMessage(t *testing.T) {
 	translator := &validatex.Translator{
 		Messages: validatex.Messages{"custom": "翻译消息"},
 	}
-	errs := validatex.Struct(translator, "parent", customNested{})
+	errs := validatex.Struct(validatex.NewFields(translator), "parent", customNested{})
 	if len(errs) != 1 || errs[0].Path != "parent.code" || errs[0].Msg != "自定义消息" {
 		t.Fatalf("unexpected custom nested error: %+v", errs)
 	}
@@ -217,7 +217,7 @@ func TestNestedValidationTranslatesManualRuleError(t *testing.T) {
 	translator := &validatex.Translator{
 		Messages: validatex.Messages{"required": "{field} required"},
 	}
-	errs := validatex.Struct(translator, "parent", translatedNested{})
+	errs := validatex.Struct(validatex.NewFields(translator), "parent", translatedNested{})
 	if len(errs) != 1 || errs[0].Path != "parent.code" || errs[0].Msg != "code required" {
 		t.Fatalf("unexpected translated nested error: %+v", errs)
 	}
@@ -237,20 +237,20 @@ func TestFieldPathDoesNotDecodePercentEncoding(t *testing.T) {
 // TestNestedValidationSkipsTypedNilPointer 验证指针专用嵌套API会跳过nil
 func TestNestedValidationSkipsTypedNilPointer(t *testing.T) {
 	var address *pointerAddress
-	if errs := validatex.StructPointer(nil, "address", address); errs != nil {
+	if errs := validatex.StructPointer(validatex.NewFields(nil), "address", address); errs != nil {
 		t.Fatalf("unexpected struct errors for typed nil pointer: %v", errs)
 	}
-	if errs := validatex.SliceStructPointer(nil, "items", []*pointerAddress{nil}); errs != nil {
+	if errs := validatex.SliceStructPointer(validatex.NewFields(nil), "items", []*pointerAddress{nil}); errs != nil {
 		t.Fatalf("unexpected slice errors for typed nil pointer: %v", errs)
 	}
-	if errs := validatex.MapStructPointer(nil, "groups", map[string]*pointerAddress{"admin": nil}); errs != nil {
+	if errs := validatex.MapStructPointer(validatex.NewFields(nil), "groups", map[string]*pointerAddress{"admin": nil}); errs != nil {
 		t.Fatalf("unexpected map errors for typed nil pointer: %v", errs)
 	}
 
-	if errs := validatex.StructPointer(nil, "address", &pointerAddress{}); len(errs) != 1 || errs[0].Path != "address.unexpected" {
+	if errs := validatex.StructPointer(validatex.NewFields(nil), "address", &pointerAddress{}); len(errs) != 1 || errs[0].Path != "address.unexpected" {
 		t.Fatalf("expected non-nil pointer validation, got %v", errs)
 	}
-	if errs := validatex.MapStructPointer(nil, "groups", map[string]*pointerAddress{"a.b": {}}); len(errs) != 1 || errs[0].Path != "groups.a%2Eb.unexpected" {
+	if errs := validatex.MapStructPointer(validatex.NewFields(nil), "groups", map[string]*pointerAddress{"a.b": {}}); len(errs) != 1 || errs[0].Path != "groups.a%2Eb.unexpected" {
 		t.Fatalf("expected escaped pointer map path, got %v", errs)
 	}
 }
@@ -260,18 +260,18 @@ func TestNestedPointerRequiredOptions(t *testing.T) {
 	translator := validatex.NewTranslator()
 	var address *pointerAddress
 
-	errs := validatex.StructPointer(translator, "address", address, validatex.WithRequired())
+	errs := validatex.StructPointer(validatex.NewFields(translator), "address", address, validatex.WithRequired())
 	if len(errs) != 1 || errs[0].Path != "address" || errs[0].Rule != "required" {
 		t.Fatalf("expected required struct pointer error, got %v", errs)
 	}
 
-	errs = validatex.SliceStructPointer(translator, "items", []*pointerAddress{}, validatex.WithRequired())
+	errs = validatex.SliceStructPointer(validatex.NewFields(translator), "items", []*pointerAddress{}, validatex.WithRequired())
 	if len(errs) != 1 || errs[0].Path != "items" || errs[0].Rule != "required" {
 		t.Fatalf("expected required slice pointer error, got %v", errs)
 	}
 
 	errs = validatex.SliceStructPointer(
-		translator,
+		validatex.NewFields(translator),
 		"items",
 		[]*pointerAddress{nil, {}},
 		validatex.WithRequiredElements(),
@@ -280,13 +280,13 @@ func TestNestedPointerRequiredOptions(t *testing.T) {
 		t.Fatalf("expected required slice element errors, got %v", errs)
 	}
 
-	errs = validatex.MapStructPointer(translator, "groups", map[string]*pointerAddress{}, validatex.WithRequired())
+	errs = validatex.MapStructPointer(validatex.NewFields(translator), "groups", map[string]*pointerAddress{}, validatex.WithRequired())
 	if len(errs) != 1 || errs[0].Path != "groups" || errs[0].Rule != "required" {
 		t.Fatalf("expected required map pointer error, got %v", errs)
 	}
 
 	errs = validatex.MapStructPointer(
-		translator,
+		validatex.NewFields(translator),
 		"groups",
 		map[string]*pointerAddress{"admin": nil, "ops": {}},
 		validatex.WithRequiredElements(),
@@ -307,7 +307,7 @@ func TestMapStructErrorsAreDeterministic(t *testing.T) {
 	}
 
 	for range 20 {
-		errs := validatex.MapStruct(translator, "groups", addresses)
+		errs := validatex.MapStruct(validatex.NewFields(translator), "groups", addresses)
 		if len(errs) != 2 || errs[0].Path != "groups.alpha.province" || errs[1].Path != "groups.beta.province" {
 			t.Fatalf("unexpected map error order: %v", errs)
 		}
@@ -326,7 +326,7 @@ func TestMapStructEscapesPathSeparators(t *testing.T) {
 		"a[0].b": {},
 	}
 
-	errs := validatex.MapStruct(nil, "groups", addresses)
+	errs := validatex.MapStruct(validatex.NewFields(nil), "groups", addresses)
 	expected := map[string]bool{
 		"groups.%2A.province":          true,
 		"groups.%empty.province":       true,
@@ -421,7 +421,7 @@ func TestMapSupportsNumericAndArrayKeys(t *testing.T) {
 		23: {},
 		1:  {},
 	}
-	errs = validatex.MapStruct(translator, "items", numberValues)
+	errs = validatex.MapStruct(validatex.NewFields(translator), "items", numberValues)
 	if len(errs) != 2 || errs[0].Path != "items.1.province" || errs[1].Path != "items.23.province" {
 		t.Fatalf("unexpected numeric key paths: %v", errs)
 	}
@@ -432,7 +432,7 @@ func TestMapSupportsNumericAndArrayKeys(t *testing.T) {
 	nestedValues := map[[3]int]mapKeyValue{
 		{1, 23, 4}: "",
 	}
-	errs = validatex.MapStruct(translator, "data", nestedValues)
+	errs = validatex.MapStruct(validatex.NewFields(translator), "data", nestedValues)
 	if len(errs) != 1 || errs[0].Msg != "[3]int{1, 23, 4} required" {
 		t.Fatalf("unexpected direct map value error: %v", errs)
 	}
@@ -516,9 +516,9 @@ type wildcardOption struct {
 }
 
 // Validate 为通配符测试实现 validatex.Validatable。
-func (option wildcardOption) Validate(translator *validatex.Translator) validatex.Errors {
+func (option wildcardOption) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "label", option.Label).Required().Errors(),
+		fields.Str("label", option.Label).Required().Errors(),
 	)
 }
 
@@ -528,10 +528,10 @@ type wildcardUser struct {
 }
 
 // Validate 为通配符测试实现validatex.Validatable
-func (user wildcardUser) Validate(translator *validatex.Translator) validatex.Errors {
+func (user wildcardUser) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "name", user.Name).Required().Errors(),
-		validatex.MapStruct(translator, "options", user.Options),
+		fields.Str("name", user.Name).Required().Errors(),
+		fields.MapStruct("options", user.Options),
 	)
 }
 
@@ -541,10 +541,10 @@ type wildcardRequest struct {
 }
 
 // Validate 为通配符测试实现validatex.Validatable
-func (request wildcardRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (request wildcardRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.SliceStruct(translator, "users", request.Users),
-		validatex.MapStruct(translator, "groups", request.Groups),
+		fields.SliceStruct("users", request.Users),
+		fields.MapStruct("groups", request.Groups),
 	)
 }
 
@@ -574,7 +574,7 @@ func TestWildcardPaths(t *testing.T) {
 		},
 	}
 
-	errs := request.Validate(translator)
+	errs := request.Validate(validatex.NewFields(translator))
 	if len(errs) != 3 {
 		t.Fatalf("expected 3 wildcard errors, got %v", errs)
 	}
@@ -604,7 +604,7 @@ func TestWildcardPaths(t *testing.T) {
 	compiled := translator.Compile()
 	translator.Messages["users.*.name.required"] = "changed"
 	translator.Translates["users.*.name"] = "changed"
-	errs = request.Validate(compiled)
+	errs = request.Validate(validatex.NewFields(compiled))
 	if len(errs) != 3 ||
 		errs[0].Path != "users[0].name" || errs[0].Msg != "用户名不能为空" ||
 		errs[1].Path != "users[0].options.theme.label" || errs[1].Msg != "选项标签不能为空" ||

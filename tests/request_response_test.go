@@ -22,28 +22,28 @@ func (r *genericRequest) Messages() validatex.Messages {
 }
 
 // Validate 实现validatex.Validatable
-func (r *genericRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *genericRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "name", r.Name).Required().Errors(),
+		fields.Str("name", r.Name).Required().Errors(),
 	)
 }
 
 type unexpectedValidationRequest struct{}
 
 // Validate 在被意外调用时返回错误
-func (*unexpectedValidationRequest) Validate(*validatex.Translator) validatex.Errors {
+func (*unexpectedValidationRequest) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "unexpected"}}
 }
 
 type unexpectedSceneValidationRequest struct{}
 
 // Validate 在被意外调用时返回错误
-func (*unexpectedSceneValidationRequest) Validate(*validatex.Translator) validatex.Errors {
+func (*unexpectedSceneValidationRequest) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "unexpected"}}
 }
 
 // ValidateWithScene 在被意外调用时返回错误
-func (*unexpectedSceneValidationRequest) ValidateWithScene(string, *validatex.Translator) validatex.Errors {
+func (*unexpectedSceneValidationRequest) ValidateWithScene(string, validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "unexpected"}}
 }
 
@@ -62,14 +62,14 @@ func (*unexpectedTranslatorRequest) Messages() validatex.Messages {
 type valueValidationRequest struct{}
 
 // Validate 使用值接收者实现validatex.Validatable
-func (valueValidationRequest) Validate(*validatex.Translator) validatex.Errors {
+func (valueValidationRequest) Validate(validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "value"}}
 }
 
 type sceneOnlyRequest struct{}
 
 // ValidateWithScene 实现validatex.SceneValidatable
-func (*sceneOnlyRequest) ValidateWithScene(scene string, _ *validatex.Translator) validatex.Errors {
+func (*sceneOnlyRequest) ValidateWithScene(scene string, _ validatex.Fields) validatex.Errors {
 	return validatex.Errors{{Path: "scene", Msg: scene}}
 }
 
@@ -83,9 +83,9 @@ func (r *mutableTranslationRequest) Messages() validatex.Messages {
 }
 
 // Validate 在翻译器创建后修改原始消息配置
-func (r *mutableTranslationRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *mutableTranslationRequest) Validate(fields validatex.Fields) validatex.Errors {
 	r.messages["required"] = "changed"
-	return validatex.Str(translator, "name", "").Required().Errors()
+	return fields.Str("name", "").Required().Errors()
 }
 
 // TestValidateRequestSkipsTypedNilPointer 验证类型化nil请求会被跳过

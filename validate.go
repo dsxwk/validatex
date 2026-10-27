@@ -112,12 +112,12 @@ func (e FieldError) Indexes() []int {
 
 // Validatable 定义普通校验接口
 type Validatable interface {
-	Validate(translator *Translator) Errors
+	Validate(fields Fields) Errors
 }
 
 // SceneValidatable 定义场景校验接口
 type SceneValidatable interface {
-	ValidateWithScene(scene string, translator *Translator) Errors
+	ValidateWithScene(scene string, fields Fields) Errors
 }
 
 // TranslatesProvider 定义字段翻译提供接口

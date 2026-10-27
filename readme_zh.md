@@ -85,11 +85,11 @@ func (r *CreateUserRequest) Messages() validatex.Messages {
 	}
 }
 
-func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *CreateUserRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "username", r.Username).Required().Min(3).Errors(),
-		validatex.Str(translator, "email", r.Email).Required().Email().Errors(),
-		validatex.Int(translator, "age", r.Age).Min(18).Errors(),
+		fields.Str("username", r.Username).Required().Min(3).Errors(),
+		fields.Str("email", r.Email).Required().Email().Errors(),
+		fields.Int("age", r.Age).Min(18).Errors(),
 	)
 }
 ```
@@ -424,7 +424,7 @@ errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```go
 errs := validatex.When(request.Status == "published", func() validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "content", request.Content).Required().Errors(),
+		fields.Str("content", request.Content).Required().Errors(),
 	)
 })
 ```
@@ -434,7 +434,7 @@ errs := validatex.When(request.Status == "published", func() validatex.Errors {
 ```go
 errs := validatex.Nullable(request.Email, func(value string) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "email", value).Required().Email().Errors(),
+		fields.Str("email", value).Required().Email().Errors(),
 	)
 })
 ```
@@ -443,24 +443,24 @@ errs := validatex.Nullable(request.Email, func(value string) validatex.Errors {
 
 ## 嵌套校验
 
-嵌套结构体和切片需要实现 `Validate(translator *validatex.Translator) validatex.Errors`。
+嵌套结构体和切片需要实现 `Validate(fields validatex.Fields) validatex.Errors`。
 
 ```go
 type Address struct {
 	Province string `json:"province"`
 }
 
-func (a Address) Validate(translator *validatex.Translator) validatex.Errors {
+func (a Address) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "province", a.Province).Required().Errors(),
+		fields.Str("province", a.Province).Required().Errors(),
 	)
 }
 
-func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *CreateUserRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Struct(translator, "address", r.Address),
-		validatex.SliceStruct(translator, "items", r.Items),
-		validatex.MapStruct(translator, "groups", r.Groups),
+		fields.Struct("address", r.Address),
+		fields.SliceStruct("items", r.Items),
+		fields.MapStruct("groups", r.Groups),
 	)
 }
 ```
@@ -470,17 +470,16 @@ func (r *CreateUserRequest) Validate(translator *validatex.Translator) validatex
 嵌套指针默认是可选字段，`StructPointer`、`SliceStructPointer` 和 `MapStructPointer` 会通过泛型指针约束跳过 nil，不依赖反射：
 
 ```go
-validatex.StructPointer(translator, "profile", request.Profile)
-validatex.SliceStructPointer(translator, "items", request.Items)
-validatex.MapStructPointer(translator, "groups", request.Groups)
+fields.StructPointer("profile", request.Profile)
+fields.SliceStructPointer("items", request.Items)
+fields.MapStructPointer("groups", request.Groups)
 ```
 
 需要指针或容器本身必传时使用 `WithRequired()`。必填指针为 nil 时只返回该路径的 `required` 错误，不再校验子字段。切片或 Map 的指针元素不能为 nil 时使用 `WithRequiredElements()`：
 
 ```go
-validatex.StructPointer(translator, "profile", request.Profile, validatex.WithRequired())
-validatex.SliceStructPointer(
-	translator,
+fields.StructPointer("profile", request.Profile, validatex.WithRequired())
+fields.SliceStructPointer(
 	"items",
 	request.Items,
 	validatex.WithRequired(),
@@ -527,15 +526,15 @@ errs = validatex.ValidateSceneRequestWithTranslator(&request, "update", translat
 场景实现按操作选择规则：
 
 ```go
-func (r *UpdateUserRequest) ValidateWithScene(scene string, translator *validatex.Translator) validatex.Errors {
+func (r *UpdateUserRequest) ValidateWithScene(scene string, fields validatex.Fields) validatex.Errors {
 	switch scene {
 	case "create":
 		return validatex.Check(
-			validatex.Str(translator, "username", r.Username).Required().Errors(),
+			fields.Str("username", r.Username).Required().Errors(),
 		)
 	case "update":
 		return validatex.Check(
-			validatex.Int(translator, "id", r.ID).Min(1).Errors(),
+			fields.Int("id", r.ID).Min(1).Errors(),
 		)
 	default:
 		return nil

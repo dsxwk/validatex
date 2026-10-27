@@ -17,8 +17,8 @@ type validatexBenchItem struct {
 }
 
 // Validate 为嵌套基准实现validatex.Validatable
-func (item validatexBenchItem) Validate(translator *validatex.Translator) validatex.Errors {
-	return validatex.Str(translator, "value", item.Value).Required().Errors()
+func (item validatexBenchItem) Validate(fields validatex.Fields) validatex.Errors {
+	return fields.Str("value", item.Value).Required().Errors()
 }
 
 type validatexBenchNestedRequest struct {
@@ -27,18 +27,18 @@ type validatexBenchNestedRequest struct {
 }
 
 // Validate 为嵌套基准实现 validatex.Validatable。
-func (request *validatexBenchNestedRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (request *validatexBenchNestedRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.SliceStruct(translator, "items", request.Items),
-		validatex.MapStruct(translator, "groups", request.Groups),
+		fields.SliceStruct("items", request.Items),
+		fields.MapStruct("groups", request.Groups),
 	)
 }
 
 // Validate 为请求基准实现validatex.Validatable
-func (r *validatexBenchRequest) Validate(translator *validatex.Translator) validatex.Errors {
+func (r *validatexBenchRequest) Validate(fields validatex.Fields) validatex.Errors {
 	return validatex.Check(
-		validatex.Str(translator, "username", r.Username).Required().Min(3).Errors(),
-		validatex.Str(translator, "email", r.Email).Required().Email().Errors(),
+		fields.Str("username", r.Username).Required().Min(3).Errors(),
+		fields.Str("email", r.Email).Required().Email().Errors(),
 	)
 }
 

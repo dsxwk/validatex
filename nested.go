@@ -34,40 +34,40 @@ func parseNestedOptions(options []NestedOption) (required, requiredElements bool
 }
 
 // nestedRequiredErrors 创建嵌套字段必填错误
-func nestedRequiredErrors[V any](translator *Translator, path string, value V) Errors {
-	field := newBaseField(translator, path, value)
+func nestedRequiredErrors[V any](fields Fields, path string, value V) Errors {
+	field := newBaseField(fields.translator, path, value)
 	field.check("required", true)
 	return field.errs
 }
 
 // Struct 校验非nil的嵌套结构体值,指针请使用StructPointer
-func Struct[T Validatable](translator *Translator, path string, value T) Errors {
+func Struct[T Validatable](fields Fields, path string, value T) Errors {
 	if any(value) == nil {
 		return nil
 	}
-	return relocateErrors(translator, path, value.Validate(translator))
+	return relocateErrors(fields, path, value.Validate(fields))
 }
 
 // StructPointer 校验嵌套结构体指针
-func StructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, value P, options ...NestedOption) Errors {
+func StructPointer[T any, P ValidatablePointer[T]](fields Fields, path string, value P, options ...NestedOption) Errors {
 	required, _ := parseNestedOptions(options)
 	if value == nil {
 		if required {
-			return nestedRequiredErrors(translator, path, value)
+			return nestedRequiredErrors(fields, path, value)
 		}
 		return nil
 	}
-	return relocateErrors(translator, path, validatePointer(translator, value))
+	return relocateErrors(fields, path, validatePointer(fields, value))
 }
 
 // SliceStruct 校验非nil结构体切片,指针元素请使用SliceStructPointer
-func SliceStruct[T Validatable](translator *Translator, path string, values []T) Errors {
+func SliceStruct[T Validatable](fields Fields, path string, values []T) Errors {
 	var errs Errors
 	for index, value := range values {
 		if any(value) == nil {
 			continue
 		}
-		childErrors := value.Validate(translator)
+		childErrors := value.Validate(fields)
 		if len(childErrors) == 0 {
 			continue
 		}
@@ -75,27 +75,27 @@ func SliceStruct[T Validatable](translator *Translator, path string, values []T)
 			errs = make(Errors, 0, len(values))
 		}
 		prefix := path + "[" + strconv.Itoa(index) + "]"
-		errs = append(errs, relocateErrors(translator, prefix, childErrors)...)
+		errs = append(errs, relocateErrors(fields, prefix, childErrors)...)
 	}
 	return errs
 }
 
 // SliceStructPointer 校验结构体指针切片
-func SliceStructPointer[T any, P ValidatablePointer[T]](translator *Translator, path string, values []P, options ...NestedOption) Errors {
+func SliceStructPointer[T any, P ValidatablePointer[T]](fields Fields, path string, values []P, options ...NestedOption) Errors {
 	required, requiredElements := parseNestedOptions(options)
 	if required && len(values) == 0 {
-		return nestedRequiredErrors(translator, path, values)
+		return nestedRequiredErrors(fields, path, values)
 	}
 	var errs Errors
 	for index, value := range values {
 		if value == nil {
 			if requiredElements {
 				itemPath := path + "[" + strconv.Itoa(index) + "]"
-				errs = append(errs, nestedRequiredErrors(translator, itemPath, value)...)
+				errs = append(errs, nestedRequiredErrors(fields, itemPath, value)...)
 			}
 			continue
 		}
-		childErrors := validatePointer(translator, value)
+		childErrors := validatePointer(fields, value)
 		if len(childErrors) == 0 {
 			continue
 		}
@@ -103,19 +103,19 @@ func SliceStructPointer[T any, P ValidatablePointer[T]](translator *Translator, 
 			errs = make(Errors, 0, len(values))
 		}
 		prefix := path + "[" + strconv.Itoa(index) + "]"
-		errs = append(errs, relocateErrors(translator, prefix, childErrors)...)
+		errs = append(errs, relocateErrors(fields, prefix, childErrors)...)
 	}
 	return errs
 }
 
 // MapStruct 校验非nil Map中的结构体值,指针值请使用MapStructPointer
-func MapStruct[K comparable, T Validatable](translator *Translator, path string, values map[K]T) Errors {
+func MapStruct[K comparable, T Validatable](fields Fields, path string, values map[K]T) Errors {
 	var errs Errors
 	for key, value := range values {
 		if any(value) == nil {
 			continue
 		}
-		childErrors := value.Validate(translator)
+		childErrors := value.Validate(fields)
 		if len(childErrors) == 0 {
 			continue
 		}
@@ -124,17 +124,17 @@ func MapStruct[K comparable, T Validatable](translator *Translator, path string,
 		}
 		keyText := formatMapKey(key)
 		prefix := joinMapPath(path, keyText)
-		errs = append(errs, relocateErrorsWithDisplay(translator, prefix, displayMapKeyText(keyText), childErrors)...)
+		errs = append(errs, relocateErrorsWithDisplay(fields, prefix, displayMapKeyText(keyText), childErrors)...)
 	}
 	sortErrorsByPath(errs)
 	return errs
 }
 
 // MapStructPointer 校验Map中的结构体指针
-func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](translator *Translator, path string, values map[K]P, options ...NestedOption) Errors {
+func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](fields Fields, path string, values map[K]P, options ...NestedOption) Errors {
 	required, requiredElements := parseNestedOptions(options)
 	if required && len(values) == 0 {
-		return nestedRequiredErrors(translator, path, values)
+		return nestedRequiredErrors(fields, path, values)
 	}
 	var errs Errors
 	for key, value := range values {
@@ -142,13 +142,13 @@ func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](translator *
 			if requiredElements {
 				keyText := formatMapKey(key)
 				itemPath := joinMapPath(path, keyText)
-				field := newBaseField(translator, itemPath, value)
+				field := newBaseField(fields.translator, itemPath, value)
 				field.checkPathDisplay(itemPath, displayMapKeyText(keyText), "required", "")
 				errs = append(errs, field.errs...)
 			}
 			continue
 		}
-		childErrors := validatePointer(translator, value)
+		childErrors := validatePointer(fields, value)
 		if len(childErrors) == 0 {
 			continue
 		}
@@ -157,24 +157,24 @@ func MapStructPointer[K comparable, T any, P ValidatablePointer[T]](translator *
 		}
 		keyText := formatMapKey(key)
 		prefix := joinMapPath(path, keyText)
-		errs = append(errs, relocateErrorsWithDisplay(translator, prefix, displayMapKeyText(keyText), childErrors)...)
+		errs = append(errs, relocateErrorsWithDisplay(fields, prefix, displayMapKeyText(keyText), childErrors)...)
 	}
 	sortErrorsByPath(errs)
 	return errs
 }
 
 // validatePointer 执行指针请求校验
-func validatePointer[T any, P ValidatablePointer[T]](translator *Translator, value P) Errors {
-	return value.Validate(translator)
+func validatePointer[T any, P ValidatablePointer[T]](fields Fields, value P) Errors {
+	return value.Validate(fields)
 }
 
 // relocateErrors 重定位嵌套错误路径并重新翻译
-func relocateErrors(translator *Translator, prefix string, values Errors) Errors {
-	return relocateErrorsWithDisplay(translator, prefix, "", values)
+func relocateErrors(fields Fields, prefix string, values Errors) Errors {
+	return relocateErrorsWithDisplay(fields, prefix, "", values)
 }
 
 // relocateErrorsWithDisplay 重定位嵌套错误路径,并为直接挂在容器键上的错误提供显示名
-func relocateErrorsWithDisplay(translator *Translator, prefix, prefixDisplay string, values Errors) Errors {
+func relocateErrorsWithDisplay(fields Fields, prefix, prefixDisplay string, values Errors) Errors {
 	if len(values) == 0 {
 		return nil
 	}
@@ -185,8 +185,8 @@ func relocateErrorsWithDisplay(translator *Translator, prefix, prefixDisplay str
 		if value.Path == "" {
 			fallback = prefixDisplay
 		}
-		display := displayFieldWithFallback(translator, path, fallback)
-		message := relocatedMessage(translator, path, display, value)
+		display := displayFieldWithFallback(fields.translator, path, fallback)
+		message := relocatedMessage(fields, path, display, value)
 		errs = append(errs, FieldError{
 			Path:     path,
 			Rule:     value.Rule,
@@ -202,16 +202,16 @@ func relocateErrorsWithDisplay(translator *Translator, prefix, prefixDisplay str
 }
 
 // relocatedMessage 按新路径重新生成错误消息
-func relocatedMessage(translator *Translator, path, display string, value FieldError) string {
+func relocatedMessage(fields Fields, path, display string, value FieldError) string {
 	switch value.source {
 	case sourceRule:
 		if len(value.args) > 0 {
-			return translateDisplay(translator, path, display, value.Rule, value.args...)
+			return translateDisplay(fields.translator, path, display, value.Rule, value.args...)
 		}
 		if value.hasArg {
-			return translateDisplay(translator, path, display, value.Rule, value.arg)
+			return translateDisplay(fields.translator, path, display, value.Rule, value.arg)
 		}
-		return translateDisplay(translator, path, display, value.Rule)
+		return translateDisplay(fields.translator, path, display, value.Rule)
 	case sourceTemplate:
 		if len(value.args) > 0 {
 			return formatMessage(value.template, path, display, value.Rule, value.args...)
@@ -222,7 +222,7 @@ func relocatedMessage(translator *Translator, path, display string, value FieldE
 		return formatMessage(value.template, path, display, value.Rule)
 	default:
 		if value.Msg == "" && value.Rule != "" {
-			return translateDisplay(translator, path, display, value.Rule)
+			return translateDisplay(fields.translator, path, display, value.Rule)
 		}
 		return value.Msg
 	}

@@ -41,7 +41,7 @@ func ValidateRequestWithTranslator[T any, P ValidatablePointer[T]](request P, tr
 	if translator == nil {
 		translator = requestTranslator(request)
 	}
-	return request.Validate(translator)
+	return request.Validate(NewFields(translator))
 }
 
 // ValidateSceneRequest 使用默认翻译器校验场景请求
@@ -57,7 +57,7 @@ func ValidateSceneRequestWithTranslator[T any, P SceneValidatablePointer[T]](req
 	if translator == nil {
 		translator = requestTranslator(request)
 	}
-	return request.ValidateWithScene(scene, translator)
+	return request.ValidateWithScene(scene, NewFields(translator))
 }
 
 // requestTranslator 创建已编译的只读请求翻译器

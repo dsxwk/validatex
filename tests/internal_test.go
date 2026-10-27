@@ -11,8 +11,8 @@ var allocationErrors validatex.Errors
 type allocationMapValue string
 
 // Validate 为分配测试实现validatex.Validatable
-func (value allocationMapValue) Validate(translator *validatex.Translator) validatex.Errors {
-	return validatex.Str(translator, "", string(value)).Required().Errors()
+func (value allocationMapValue) Validate(fields validatex.Fields) validatex.Errors {
+	return fields.Str("", string(value)).Required().Errors()
 }
 
 // TestValidRulesDoNotAllocate 验证有效输入不会产生分配
@@ -66,13 +66,13 @@ func TestValidRulesDoNotAllocate(t *testing.T) {
 		{
 			name: "valid map struct keys",
 			errors: func() validatex.Errors {
-				return validatex.MapStruct(translator, "values", arrayStructValues)
+				return validatex.MapStruct(validatex.NewFields(translator), "values", arrayStructValues)
 			},
 		},
 		{
 			name: "valid slice structs",
 			errors: func() validatex.Errors {
-				return validatex.SliceStruct(translator, "values", sliceStructValues)
+				return validatex.SliceStruct(validatex.NewFields(translator), "values", sliceStructValues)
 			},
 		},
 		{

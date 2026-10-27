@@ -42,30 +42,30 @@ func (f Fields) Map[K comparable, V any](path string, value map[K]V) *MapField[K
 
 // Struct 校验嵌套结构体值
 func (f Fields) Struct[T Validatable](path string, value T) Errors {
-	return Struct(f.translator, path, value)
+	return Struct(f, path, value)
 }
 
 // SliceStruct 校验结构体切片
 func (f Fields) SliceStruct[T Validatable](path string, values []T) Errors {
-	return SliceStruct(f.translator, path, values)
+	return SliceStruct(f, path, values)
 }
 
 // MapStruct 校验结构体Map
 func (f Fields) MapStruct[K comparable, T Validatable](path string, values map[K]T) Errors {
-	return MapStruct(f.translator, path, values)
+	return MapStruct(f, path, values)
 }
 
 // StructPointer 校验嵌套结构体指针
 func (f Fields) StructPointer[T any, P ValidatablePointer[T]](path string, value P, options ...NestedOption) Errors {
-	return StructPointer(f.translator, path, value, options...)
+	return StructPointer(f, path, value, options...)
 }
 
 // SliceStructPointer 校验结构体指针切片
 func (f Fields) SliceStructPointer[T any, P ValidatablePointer[T]](path string, values []P, options ...NestedOption) Errors {
-	return SliceStructPointer(f.translator, path, values, options...)
+	return SliceStructPointer(f, path, values, options...)
 }
 
 // MapStructPointer 校验Map中的结构体指针
 func (f Fields) MapStructPointer[K comparable, T any, P ValidatablePointer[T]](path string, values map[K]P, options ...NestedOption) Errors {
-	return MapStructPointer(f.translator, path, values, options...)
+	return MapStructPointer(f, path, values, options...)
 }
