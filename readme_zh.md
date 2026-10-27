@@ -43,6 +43,7 @@ validatex/
 ├── validate.go              # 核心接口,错误结构和聚合逻辑
 ├── translator.go            # 消息查找及通配符翻译
 ├── request.go               # 请求校验和翻译器创建
+├── fields.go                # 绑定翻译器的字段构造器
 ├── response.go              # 框架无关的错误响应
 ├── conditional.go           # When和Nullable条件校验
 ├── field.go                 # 泛型字段基础及基础类型构造器
@@ -115,6 +116,19 @@ errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 `NewRequestTranslator` 返回请求翻译表的已编译快照。需要批量翻译错误时应复用该翻译器；请求实现翻译接口时，`ValidateRequest` 会在每次调用中创建已编译翻译器。
+
+单个校验函数需要创建多个字段时，可以只绑定一次翻译器：
+
+```go
+fields := validatex.NewFields(translator)
+return validatex.Check(
+	fields.Str("username", request.Username).Required().Errors(),
+	fields.Int("age", request.Age).Min(18).Errors(),
+	fields.Slice("ids", request.IDs).Required().Errors(),
+)
+```
+
+`Fields` 提供与包级函数一致的字符串、数字、布尔、集合、嵌套值和嵌套指针构造器。
 
 ## 内置规则
 

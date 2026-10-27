@@ -42,6 +42,7 @@ validatex/
 ├── validate.go              # Core interfaces, errors, and aggregator
 ├── translator.go            # Message lookup and wildcard translation
 ├── request.go               # Request validation and translator creation
+├── fields.go                # Translator-bound field constructors
 ├── response.go              # Framework-independent error responses
 ├── conditional.go           # When and Nullable helpers
 ├── field.go                 # Generic field base and primitive constructors
@@ -114,6 +115,19 @@ errs := validatex.ValidateRequestWithTranslator(&request, translator)
 ```
 
 `NewRequestTranslator` returns a compiled snapshot of the request translation maps. Reuse that translator when translating many validation errors. `ValidateRequest` creates a compiled translator for each call when the request implements translation providers.
+
+Bind the translator once when a validation function creates many fields:
+
+```go
+fields := validatex.NewFields(translator)
+return validatex.Check(
+	fields.Str("username", request.Username).Required().Errors(),
+	fields.Int("age", request.Age).Min(18).Errors(),
+	fields.Slice("ids", request.IDs).Required().Errors(),
+)
+```
+
+`Fields` exposes the same string, numeric, boolean, collection, nested value, and nested pointer constructors as the package-level functions.
 
 ## Built-In Rules
 
