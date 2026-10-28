@@ -471,14 +471,14 @@ func TestErrorsError(t *testing.T) {
 		{Path: "name", Msg: "required"},
 		{Path: "email", Msg: "invalid"},
 	}
-	if message := errs.Error(); message != "[name: required] [email: invalid]" {
+	if message := errs.Error(); message != "name: required; email: invalid" {
 		t.Fatalf("unexpected error string: %s", message)
 	}
 	if message := (validatex.Errors{}).Error(); message != "" {
 		t.Fatalf("expected empty error string, got %q", message)
 	}
 	ruleOnly := validatex.Errors{{Path: "age", Rule: "required"}}
-	if message := ruleOnly.Error(); message != "[age: required]" {
+	if message := ruleOnly.Error(); message != "age: required" {
 		t.Fatalf("expected rule fallback in error string, got %q", message)
 	}
 	if message := ruleOnly.ToMap()["age"][0]; message != "required" {

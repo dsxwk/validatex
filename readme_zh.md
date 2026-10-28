@@ -15,6 +15,7 @@
 - 支持带类型判断函数、翻译消息和命名占位符的自定义规则。
 - 支持创建、更新及其他业务场景校验。
 - 提供与 Web 框架解耦的校验结果和可选 HTTP 响应辅助结构，可集成 Gin、Echo、Fiber、`net/http`、gRPC 和 CLI。
+- 字段错误可序列化为包含字段路径、规则和消息的对象数组。
 - 内置无第三方依赖的性能基准。
 
 ## 环境要求
@@ -584,18 +585,30 @@ func (ctl *UserController) Create(c *gin.Context) {
 
 - JSON 格式错误返回 HTTP `400`。
 - 字段校验失败返回 HTTP `422`。
-- 校验错误会按字段路径聚合到 `data`。
+- 校验错误会以对象数组写入 `data.errors`。
 
 ```json
 {
   "code": 422,
   "msg": "参数校验失败",
   "data": {
-    "email": ["邮箱格式不正确"],
-    "address.province": ["省份必填"]
+    "errors": [
+      {
+        "field": "email",
+        "rule": "email",
+        "message": "邮箱格式不正确"
+      },
+      {
+        "field": "address.province",
+        "rule": "required",
+        "message": "省份必填"
+      }
+    ]
   }
 }
 ```
+
+`Errors.Error()` 只用于日志和调试，输出采用 `field: message; field: message` 格式。客户端响应应使用 `Errors` 的结构化字段，不应依赖 `Errors.Error()` 的字符串格式。
 
 ## 性能基准
 

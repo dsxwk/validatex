@@ -15,6 +15,7 @@ The core package uses only the Go standard library at runtime. HTTP framework in
 - Custom rules with typed predicates, translated messages, and named placeholders.
 - Scene validation for create, update, and other application operations.
 - Framework-neutral validation results with optional HTTP response helpers for Gin, Echo, Fiber, `net/http`, gRPC, and CLI tools.
+- Field errors serialize to an object array containing the field path, rule, and message.
 - Built-in performance benchmarks with no external benchmark dependencies.
 
 ## Requirements
@@ -491,11 +492,23 @@ The generic response structure can be encoded by any framework:
   "code": 422,
   "msg": "Validation failed",
   "data": {
-    "email": ["Email is invalid"],
-    "address.province": ["Province is required"]
+    "errors": [
+      {
+        "field": "email",
+        "rule": "email",
+        "message": "Email is invalid"
+      },
+      {
+        "field": "address.province",
+        "rule": "required",
+        "message": "Province is required"
+      }
+    ]
   }
 }
 ```
+
+`Errors.Error()` is intended for logging and debugging and uses the `field: message; field: message` format. Consumers should render responses from the structured `Errors` fields instead of depending on the string returned by `Errors.Error()`.
 
 ## Performance
 

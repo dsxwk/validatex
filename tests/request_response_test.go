@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -204,9 +205,26 @@ func TestErrorResponse(t *testing.T) {
 	if validationResponse.Code != http.StatusUnprocessableEntity || validationResponse.Msg != "参数校验失败" {
 		t.Fatalf("unexpected validation response: %+v", validationResponse)
 	}
-	data, ok := validationResponse.Data.(map[string][]string)
-	if !ok || data["name"][0] != "名称必填" {
+	validationData, ok := validationResponse.Data.(validatex.ValidationErrorData)
+	if !ok || len(validationData.Errors) != 1 || validationData.Errors[0].Path != "name" {
 		t.Fatalf("unexpected validation response data: %+v", validationResponse.Data)
+	}
+	payload, err := json.Marshal(validationResponse)
+	if err != nil {
+		t.Fatalf("failed to marshal validation response: %v", err)
+	}
+	expected := `{"code":422,"msg":"参数校验失败","data":{"errors":[{"field":"name","rule":"required","message":"名称必填"}]}}`
+	if string(payload) != expected {
+		t.Fatalf("unexpected validation response json: %s", payload)
+	}
+
+	ruleOnlyPayload, err := json.Marshal(validatex.Errors{{Path: "age", Rule: "required"}})
+	if err != nil {
+		t.Fatalf("failed to marshal rule-only error: %v", err)
+	}
+	ruleOnlyExpected := `[{"field":"age","rule":"required","message":"required"}]`
+	if string(ruleOnlyPayload) != ruleOnlyExpected {
+		t.Fatalf("unexpected rule-only error json: %s", ruleOnlyPayload)
 	}
 
 	bindResponse := validatex.NewBindErrorResponse("invalid json", "参数格式错误")

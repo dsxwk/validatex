@@ -2,6 +2,7 @@
 package validatex
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 )
@@ -25,9 +26,9 @@ type Translator struct {
 
 // FieldError 单条字段错误
 type FieldError struct {
-	Path     string
-	Rule     string
-	Msg      string
+	Path     string `json:"field"`
+	Rule     string `json:"rule"`
+	Msg      string `json:"message"`
 	template string
 	arg      any
 	args     []any
@@ -46,28 +47,39 @@ const (
 // Errors 字段错误集合
 type Errors []FieldError
 
-// Error 返回所有错误的文本
+// MarshalJSON 输出稳定的字段错误结构
+func (e FieldError) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		Field   string `json:"field"`
+		Rule    string `json:"rule"`
+		Message string `json:"message"`
+	}{
+		Field:   e.Path,
+		Rule:    e.Rule,
+		Message: e.text(),
+	})
+}
+
+// Error 返回用于日志的错误文本
 func (e Errors) Error() string {
 	if len(e) == 0 {
 		return ""
 	}
 
-	size := len(e)*5 - 1
+	size := (len(e) - 1) * 2
 	for _, item := range e {
-		size += len(item.Path) + len(item.text())
+		size += len(item.Path) + len(item.text()) + 2
 	}
 
 	var builder strings.Builder
 	builder.Grow(size)
 	for index, item := range e {
 		if index > 0 {
-			builder.WriteByte(' ')
+			builder.WriteString("; ")
 		}
-		builder.WriteByte('[')
 		builder.WriteString(item.Path)
 		builder.WriteString(": ")
 		builder.WriteString(item.text())
-		builder.WriteByte(']')
 	}
 	return builder.String()
 }

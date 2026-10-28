@@ -9,6 +9,11 @@ type ErrorResponse struct {
 	Data any    `json:"data"`
 }
 
+// ValidationErrorData 定义校验错误响应数据
+type ValidationErrorData struct {
+	Errors Errors `json:"errors"`
+}
+
 // NewErrorResponse 创建通用错误响应
 func NewErrorResponse(code int, message string, data any) ErrorResponse {
 	return ErrorResponse{
@@ -25,5 +30,8 @@ func NewBindErrorResponse(data, message string) ErrorResponse {
 
 // NewValidationErrorResponse 创建校验错误响应
 func NewValidationErrorResponse(errors Errors, message string) ErrorResponse {
-	return NewErrorResponse(http.StatusUnprocessableEntity, message, errors.ToMap())
+	if errors == nil {
+		errors = Errors{}
+	}
+	return NewErrorResponse(http.StatusUnprocessableEntity, message, ValidationErrorData{Errors: errors})
 }
